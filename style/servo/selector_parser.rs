@@ -16,8 +16,8 @@ use crate::invalidation::element::element_wrapper::ElementSnapshot;
 use crate::properties::longhands::display::computed_value::T as Display;
 use crate::properties::{ComputedValues, PropertyFlags};
 use crate::selector_parser::AttrValue as SelectorAttrValue;
-use crate::selector_parser::{PseudoElementCascadeType, SelectorParser};
-use crate::values::{AtomIdent, AtomString};
+use crate::selector_parser::{Direction, PseudoElementCascadeType, SelectorParser};
+use crate::values::{AtomIdent, AtomString, CSSInteger};
 use crate::{Atom, CaseSensitivityExt, LocalName, Namespace, Prefix};
 use cssparser::{Parser as CssParser, ToCss, match_ignore_ascii_case, serialize_identifier};
 use dom::{DocumentState, ElementState};
@@ -364,6 +364,27 @@ pub type Lang = Box<str>;
 #[derive(Clone, Debug, Eq, Hash, MallocSizeOf, PartialEq, ToCss, ToShmem)]
 pub struct CustomState(pub AtomIdent);
 
+/// The heading levels listed in a `:heading()` pseudo-class.
+/// https://drafts.csswg.org/selectors-5/#headings
+#[derive(Clone, Debug, Eq, Hash, MallocSizeOf, PartialEq, ToShmem)]
+pub struct HeadingSelectorData(pub thin_vec::ThinVec<CSSInteger>);
+
+impl HeadingSelectorData {
+    /// Whether the heading level packed into `state` is one of the listed
+    /// levels. An empty list, from a bare `:heading`, matches any level.
+    pub fn matches_state(&self, state: ElementState) -> bool {
+        let bits = state.intersection(ElementState::HEADING_LEVEL_BITS).bits();
+        if bits == 0 {
+            return false;
+        }
+        if self.0.is_empty() {
+            return true;
+        }
+        let level = (bits >> dom::HEADING_LEVEL_OFFSET) as CSSInteger;
+        self.0.contains(&level)
+    }
+}
+
 /// A non tree-structural pseudo-class.
 /// See https://drafts.csswg.org/selectors-4/#structural-pseudos
 #[derive(Clone, Debug, Eq, Hash, MallocSizeOf, PartialEq, ToShmem)]
@@ -377,12 +398,16 @@ pub enum NonTSPseudoClass {
     CustomState(CustomState),
     Default,
     Defined,
+    /// The `:dir()` pseudo-class.
+    Dir(Direction),
     Disabled,
     Enabled,
     Focus,
     FocusWithin,
     FocusVisible,
     Fullscreen,
+    /// The `:heading` and `:heading()` pseudo-classes.
+    Heading(HeadingSelectorData),
     Hover,
     InRange,
     Indeterminate,
@@ -453,12 +478,31 @@ impl ToCss for NonTSPseudoClass {
             },
             Self::Default => ":default",
             Self::Defined => ":defined",
+            Self::Dir(ref dir) => {
+                dest.write_str(":dir(")?;
+                style_traits::ToCss::to_css(dir, &mut style_traits::CssWriter::new(dest))?;
+                return dest.write_char(')');
+            },
             Self::Disabled => ":disabled",
             Self::Enabled => ":enabled",
             Self::Focus => ":focus",
             Self::FocusVisible => ":focus-visible",
             Self::FocusWithin => ":focus-within",
             Self::Fullscreen => ":fullscreen",
+            Self::Heading(ref levels) => {
+                dest.write_str(":heading")?;
+                if levels.0.is_empty() {
+                    return Ok(());
+                }
+                dest.write_char('(')?;
+                for (index, level) in levels.0.iter().enumerate() {
+                    if index > 0 {
+                        dest.write_str(", ")?;
+                    }
+                    write!(dest, "{level}")?;
+                }
+                return dest.write_char(')');
+            },
             Self::Hover => ":hover",
             Self::InRange => ":in-range",
             Self::Indeterminate => ":indeterminate",
@@ -499,12 +543,14 @@ impl NonTSPseudoClass {
             Self::Checked => ElementState::CHECKED,
             Self::Default => ElementState::DEFAULT,
             Self::Defined => ElementState::DEFINED,
+            Self::Dir(ref dir) => dir.element_state(),
             Self::Disabled => ElementState::DISABLED,
             Self::Enabled => ElementState::ENABLED,
             Self::Focus => ElementState::FOCUS,
             Self::FocusVisible => ElementState::FOCUSRING,
             Self::FocusWithin => ElementState::FOCUS_WITHIN,
             Self::Fullscreen => ElementState::FULLSCREEN,
+            Self::Heading(_) => ElementState::HEADING_LEVEL_BITS,
             Self::Hover => ElementState::HOVER,
             Self::InRange => ElementState::INRANGE,
             Self::Indeterminate => ElementState::INDETERMINATE,
@@ -628,6 +674,7 @@ impl<'a, 'i> ::selectors::Parser<'i> for SelectorParser<'a> {
             "focus-visible" => NonTSPseudoClass::FocusVisible,
             "focus-within" => NonTSPseudoClass::FocusWithin,
             "fullscreen" => NonTSPseudoClass::Fullscreen,
+            "heading" => NonTSPseudoClass::Heading(HeadingSelectorData(Default::default())),
             "hover" => NonTSPseudoClass::Hover,
             "indeterminate" => NonTSPseudoClass::Indeterminate,
             "invalid" => NonTSPseudoClass::Invalid,
@@ -684,6 +731,11 @@ impl<'a, 'i> ::selectors::Parser<'i> for SelectorParser<'a> {
             "state" => {
                 let result = AtomIdent::from(parser.expect_ident()?.as_ref());
                 NonTSPseudoClass::CustomState(CustomState(result))
+            },
+            "dir" => NonTSPseudoClass::Dir(Direction::parse(parser)?),
+            "heading" => {
+                let levels = parser.parse_comma_separated(|input| Ok(input.expect_integer()?))?;
+                NonTSPseudoClass::Heading(HeadingSelectorData(levels.into()))
             },
             _ => return Err(ParseError::custom(SelectorParseErrorKind::UnexpectedIdent)),
         };
