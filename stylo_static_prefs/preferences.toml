@@ -50,6 +50,7 @@
 "layout.css.outline-offset.snapping" = 1
 "layout.css.overflow-moz-hidden-unscrollable.enabled" = false
 "layout.css.overscroll-behavior.enabled" = false
+"layout.css.page-rule.enabled" = false
 "layout.css.progress-function.enabled" = true
 "layout.css.properties-and-values.enabled" = true
 "layout.css.random.enabled" = false
