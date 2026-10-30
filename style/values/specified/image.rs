@@ -331,15 +331,12 @@ impl CrossFade {
 
 impl CrossFadeElement {
     fn parse_percentage(context: &ParserContext, input: &mut Parser) -> Option<Percentage> {
-        // We clamp our values here as this is the way that Safari and Chrome's
-        // implementation handle out-of-bounds percentages but whether or not
-        // this behavior follows the specification is still being discussed.
+        // The grammar is <percentage [0,100]>, so literal values outside the
+        // range are invalid and calc() results are clamped.
         // See: <https://github.com/w3c/csswg-drafts/issues/5333>
-        let mut p = input
-            .try_parse(|input| Percentage::parse_non_negative(context, input))
-            .ok()?;
-        p.clamp_to_hundred();
-        Some(p)
+        input
+            .try_parse(|input| Percentage::parse_zero_to_a_hundred(context, input))
+            .ok()
     }
 
     /// <cf-image> = <percentage>? && [ <image> | <color> ]
