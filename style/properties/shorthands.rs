@@ -907,7 +907,7 @@ pub mod columns {
     pub use crate::properties::generated::shorthands::columns::*;
 
     use super::*;
-    use crate::properties::longhands::{column_count, column_width};
+    use crate::properties::longhands::{column_count, column_height, column_width};
 
     pub fn parse_value(
         context: &ParserContext,
@@ -946,13 +946,18 @@ pub mod columns {
 
         let values = autos + column_count.iter().len() + column_width.iter().len();
         if values == 0 || values > 2 {
-            Err(ParseError::custom(StyleParseErrorKind::UnspecifiedError))
-        } else {
-            Ok(expanded! {
-                column_count: unwrap_or_initial!(column_count),
-                column_width: unwrap_or_initial!(column_width),
-            })
+            return Err(ParseError::custom(StyleParseErrorKind::UnspecifiedError));
         }
+        let column_height = if input.try_parse(|input| input.expect_delim('/')).is_ok() {
+            Some(column_height::parse(context, input)?)
+        } else {
+            None
+        };
+        Ok(expanded! {
+            column_count: unwrap_or_initial!(column_count),
+            column_width: unwrap_or_initial!(column_width),
+            column_height: unwrap_or_initial!(column_height),
+        })
     }
 
     impl<'a> ToCss for LonghandsToSerialize<'a> {
@@ -961,12 +966,17 @@ pub mod columns {
             W: fmt::Write,
         {
             if self.column_width.is_auto() {
-                return self.column_count.to_css(dest);
-            }
-            self.column_width.to_css(dest)?;
-            if !self.column_count.is_auto() {
-                dest.write_char(' ')?;
                 self.column_count.to_css(dest)?;
+            } else {
+                self.column_width.to_css(dest)?;
+                if !self.column_count.is_auto() {
+                    dest.write_char(' ')?;
+                    self.column_count.to_css(dest)?;
+                }
+            }
+            if !self.column_height.is_auto() {
+                dest.write_str(" / ")?;
+                self.column_height.to_css(dest)?;
             }
             Ok(())
         }

@@ -776,6 +776,16 @@ spec = "https://drafts.csswg.org/css-multicol/#propdef-column-width"
 servo_restyle_damage = "rebuild_box"
 affects = "layout"
 
+[column-height]
+type = "length::NonNegativeLengthOrAuto"
+initial = "computed::length::NonNegativeLengthOrAuto::auto()"
+struct = "column"
+engine = "servo"
+servo_pref = "layout.css.columns.enabled"
+spec = "https://drafts.csswg.org/css-multicol-2/#ch"
+servo_restyle_damage = "rebuild_box"
+affects = "layout"
+
 [contain]
 type = "Contain"
 initial = "specified::Contain::empty()"

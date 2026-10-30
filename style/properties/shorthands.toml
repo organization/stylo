@@ -483,7 +483,7 @@ sub_properties = ["block-step-size", "block-step-insert", "block-step-align", "b
 spec = "https://drafts.csswg.org/css-rhythm/#block-step"
 
 [columns]
-sub_properties = ["column-width", "column-count"]
+sub_properties = ["column-width", "column-count", "column-height"]
 spec = "https://drafts.csswg.org/css-multicol/#propdef-columns"
 servo_pref = "layout.css.columns.enabled"
 
