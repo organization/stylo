@@ -4371,6 +4371,14 @@ impl CascadeData {
                                 | ImplicitScopeRoot::DocumentElement => {
                                     StylistImplicitScopeRoot::Normal(root)
                                 },
+                                // Servo gives each shadow root its own cascade data, so the
+                                // root found for the sheet is the one for this tree.
+                                ImplicitScopeRoot::ShadowHost(_)
+                                | ImplicitScopeRoot::InShadowTree(_)
+                                    if cfg!(feature = "servo") =>
+                                {
+                                    StylistImplicitScopeRoot::Normal(root)
+                                },
                                 ImplicitScopeRoot::ShadowHost(_)
                                 | ImplicitScopeRoot::InShadowTree(_) => {
                                     // Style data can be shared between shadow trees, so we must

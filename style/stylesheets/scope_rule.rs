@@ -162,7 +162,7 @@ impl ScopeBounds {
 }
 
 /// Types of implicit scope root.
-#[derive(Debug, Copy, Clone, MallocSizeOf)]
+#[derive(Debug, Copy, Clone, MallocSizeOf, PartialEq)]
 pub enum ImplicitScopeRoot {
     /// This implicit scope root is in the light tree.
     InLightTree(OpaqueElement),

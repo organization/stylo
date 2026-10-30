@@ -284,13 +284,18 @@ impl StylesheetInDocument for Stylesheet {
 }
 
 /// A simple wrapper over an `Arc<Stylesheet>`, with pointer comparison, and
-/// suitable for its use in a `StylesheetSet`.
+/// suitable for its use in a `StylesheetSet`. The second field is the implicit
+/// scope root that the owner of the stylesheet gives to `@scope` rules without
+/// a prelude.
 #[derive(Clone, Debug, MallocSizeOf)]
-pub struct DocumentStyleSheet(#[ignore_malloc_size_of = "Arc"] pub Arc<Stylesheet>);
+pub struct DocumentStyleSheet(
+    #[ignore_malloc_size_of = "Arc"] pub Arc<Stylesheet>,
+    pub Option<ImplicitScopeRoot>,
+);
 
 impl PartialEq for DocumentStyleSheet {
     fn eq(&self, other: &Self) -> bool {
-        Arc::ptr_eq(&self.0, &other.0)
+        Arc::ptr_eq(&self.0, &other.0) && self.1 == other.1
     }
 }
 
@@ -309,7 +314,7 @@ impl StylesheetInDocument for DocumentStyleSheet {
     }
 
     fn implicit_scope_root(&self) -> Option<ImplicitScopeRoot> {
-        None
+        self.1
     }
 }
 
