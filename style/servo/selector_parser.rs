@@ -24,7 +24,6 @@ use dom::{DocumentState, ElementState};
 use selectors::attr::{AttrSelectorOperation, CaseSensitivity, NamespaceConstraint};
 use selectors::parser::SelectorParseErrorKind;
 use std::fmt;
-use std::mem;
 use std::ops::{Deref, DerefMut};
 use style_traits::{ParseError, StyleParseErrorKind};
 
@@ -73,10 +72,99 @@ pub enum PseudoElement {
     ServoAnonymousTableRow,
     ServoTableGrid,
     ServoTableWrapper,
+
+    // View transition pseudos, which are parsed but never generated.
+    ViewTransition,
+    ViewTransitionGroup(PtNameAndClassSelector),
+    ViewTransitionImagePair(PtNameAndClassSelector),
+    ViewTransitionOld(PtNameAndClassSelector),
+    ViewTransitionNew(PtNameAndClassSelector),
 }
 
 /// The count of all pseudo-elements.
-pub const PSEUDO_COUNT: usize = PseudoElement::ServoTableWrapper as usize + 1;
+pub const PSEUDO_COUNT: usize = 26;
+
+/// The argument of the view transition pseudo-elements, interned so that
+/// [`PseudoElement`] stays `Copy`.
+///
+/// <https://drafts.csswg.org/css-view-transitions-2/#typedef-pt-name-and-class-selector>
+#[derive(
+    Clone, Copy, Debug, Deserialize, Eq, Hash, MallocSizeOf, PartialEq, Serialize, ToShmem,
+)]
+pub struct PtNameAndClassSelector(u32);
+
+static PT_NAMES_AND_CLASSES: std::sync::RwLock<Vec<(Option<Atom>, Vec<Atom>)>> =
+    std::sync::RwLock::new(Vec::new());
+
+impl PtNameAndClassSelector {
+    fn intern(name: Option<Atom>, classes: Vec<Atom>) -> Self {
+        let entry = (name, classes);
+        let mut names = PT_NAMES_AND_CLASSES.write().unwrap();
+        let index = match names.iter().position(|existing| *existing == entry) {
+            Some(index) => index,
+            None => {
+                names.push(entry);
+                names.len() - 1
+            },
+        };
+        Self(index as u32)
+    }
+
+    /// `<pt-name-selector> <pt-class-selector>? | <pt-class-selector>`, where
+    /// `<pt-name-selector> = '*' | <custom-ident>` and
+    /// `<pt-class-selector> = ['.' <custom-ident>]+`.
+    fn parse<'i>(input: &mut CssParser<'i>) -> Result<Self, ParseError> {
+        use crate::values::CustomIdent;
+        use cssparser::Token;
+
+        let name = input.try_parse(|input| {
+            if input.try_parse(|i| i.expect_delim('*')).is_ok() {
+                Ok(None)
+            } else {
+                CustomIdent::parse(input, &[]).map(|ident| Some(ident.0))
+            }
+        });
+        if name.is_err() {
+            input.skip_whitespace();
+        }
+        let mut classes = Vec::new();
+        while let Ok(class) = input.try_parse(|input| {
+            match input.next_including_whitespace()? {
+                Token::Delim('.') => {},
+                _ => return Err(ParseError::unexpected_token()),
+            }
+            if input.try_parse(|i| i.expect_whitespace()).is_ok() {
+                return Err(ParseError::unexpected_token());
+            }
+            CustomIdent::parse(input, &[]).map(|ident| ident.0)
+        }) {
+            classes.push(class);
+        }
+        if name.is_err() && classes.is_empty() {
+            return Err(ParseError::custom(StyleParseErrorKind::UnspecifiedError));
+        }
+        Ok(Self::intern(name.unwrap_or(None), classes))
+    }
+}
+
+impl ToCss for PtNameAndClassSelector {
+    fn to_css<W>(&self, dest: &mut W) -> fmt::Result
+    where
+        W: fmt::Write,
+    {
+        let names = PT_NAMES_AND_CLASSES.read().unwrap();
+        let (name, classes) = &names[self.0 as usize];
+        match name {
+            Some(name) => serialize_identifier(name, dest)?,
+            None => dest.write_char('*')?,
+        }
+        for class in classes {
+            dest.write_char('.')?;
+            serialize_identifier(class, dest)?;
+        }
+        Ok(())
+    }
+}
 
 impl ToCss for PseudoElement {
     fn to_css<W>(&self, dest: &mut W) -> fmt::Result
@@ -108,13 +196,52 @@ impl ToCss for PseudoElement {
             ServoAnonymousTableRow => "::-servo-anonymous-table-row",
             ServoTableGrid => "::-servo-table-grid",
             ServoTableWrapper => "::-servo-table-wrapper",
+            ViewTransition => "::view-transition",
+            ViewTransitionGroup(argument)
+            | ViewTransitionImagePair(argument)
+            | ViewTransitionOld(argument)
+            | ViewTransitionNew(argument) => {
+                dest.write_str(match *self {
+                    ViewTransitionGroup(..) => "::view-transition-group(",
+                    ViewTransitionImagePair(..) => "::view-transition-image-pair(",
+                    ViewTransitionOld(..) => "::view-transition-old(",
+                    _ => "::view-transition-new(",
+                })?;
+                argument.to_css(dest)?;
+                return dest.write_char(')');
+            },
         })
     }
 }
 
 impl ::selectors::parser::PseudoElement for PseudoElement {
     fn parses_as_element_backed(&self) -> bool {
-        matches!(self, Self::DetailsContent)
+        matches!(self, Self::DetailsContent) || self.has_argument()
+    }
+
+    fn specificity_count(&self) -> u32 {
+        match *self {
+            Self::ViewTransitionGroup(argument)
+            | Self::ViewTransitionImagePair(argument)
+            | Self::ViewTransitionOld(argument)
+            | Self::ViewTransitionNew(argument) => {
+                // A named view transition pseudo-element selector with only the
+                // universal name and no classes has no specificity.
+                let names = PT_NAMES_AND_CLASSES.read().unwrap();
+                let (name, classes) = &names[argument.0 as usize];
+                u32::from(name.is_some() || !classes.is_empty())
+            },
+            _ => 1,
+        }
+    }
+
+    fn is_in_pseudo_element_tree(&self) -> bool {
+        self.has_argument()
+    }
+
+    fn accepts_state_pseudo_classes(&self) -> bool {
+        // `:only-child` is allowed after a descendant of a pseudo-element root.
+        self.is_in_pseudo_element_tree()
     }
 }
 
@@ -126,13 +253,41 @@ impl PseudoElement {
     #[inline]
     pub fn eager_index(&self) -> usize {
         debug_assert!(self.is_eager());
-        self.clone() as usize
+        self.index()
     }
 
     /// An index for this pseudo-element to be indexed in an enumerated array.
     #[inline]
     pub fn index(&self) -> usize {
-        self.clone() as usize
+        use self::PseudoElement::*;
+        match *self {
+            After => 0,
+            Before => 1,
+            Selection => 2,
+            FirstLetter => 3,
+            FirstLine => 4,
+            Backdrop => 5,
+            DetailsContent => 6,
+            Marker => 7,
+            ColorSwatch => 8,
+            FileSelectorButton => 9,
+            Placeholder => 10,
+            SliderFill => 11,
+            SliderThumb => 12,
+            SliderTrack => 13,
+            MozProgressBar => 14,
+            ServoTextControlInnerContainer => 15,
+            ServoTextControlInnerEditor => 16,
+            ServoAnonymousBox => 17,
+            ServoAnonymousTable => 18,
+            ServoAnonymousTableCell => 19,
+            ServoAnonymousTableRow => 20,
+            ServoTableGrid => 21,
+            ServoTableWrapper => 22,
+            ViewTransition => 23,
+            ViewTransitionGroup(..) | ViewTransitionImagePair(..) => 24,
+            ViewTransitionOld(..) | ViewTransitionNew(..) => 25,
+        }
     }
 
     /// An array of `None`, one per pseudo-element.
@@ -143,9 +298,14 @@ impl PseudoElement {
     /// Creates a pseudo-element from an eager index.
     #[inline]
     pub fn from_eager_index(i: usize) -> Self {
-        const _: () = assert!(EAGER_PSEUDO_COUNT <= (u8::MAX as usize));
-        assert!(i < EAGER_PSEUDO_COUNT);
-        let result: PseudoElement = unsafe { mem::transmute(i as u8) };
+        let result = match i {
+            0 => PseudoElement::After,
+            1 => PseudoElement::Before,
+            2 => PseudoElement::Selection,
+            3 => PseudoElement::FirstLetter,
+            4 => PseudoElement::FirstLine,
+            _ => panic!("{i} is not an eager pseudo-element index"),
+        };
         debug_assert!(result.is_eager());
         result
     }
@@ -261,7 +421,12 @@ impl PseudoElement {
             | PseudoElement::SliderTrack
             | PseudoElement::MozProgressBar
             | PseudoElement::ServoTextControlInnerContainer
-            | PseudoElement::ServoTextControlInnerEditor => PseudoElementCascadeType::Lazy,
+            | PseudoElement::ServoTextControlInnerEditor
+            | PseudoElement::ViewTransition
+            | PseudoElement::ViewTransitionGroup(..)
+            | PseudoElement::ViewTransitionImagePair(..)
+            | PseudoElement::ViewTransitionOld(..)
+            | PseudoElement::ViewTransitionNew(..) => PseudoElementCascadeType::Lazy,
             PseudoElement::ServoAnonymousBox
             | PseudoElement::ServoAnonymousTable
             | PseudoElement::ServoAnonymousTableCell
@@ -319,7 +484,13 @@ impl PseudoElement {
     /// Whether this pseudo-element takes an argument.
     #[inline]
     pub fn has_argument(&self) -> bool {
-        false
+        matches!(
+            self,
+            Self::ViewTransitionGroup(..)
+                | Self::ViewTransitionImagePair(..)
+                | Self::ViewTransitionOld(..)
+                | Self::ViewTransitionNew(..)
+        )
     }
 
     /// Whether this pseudo-element is the ::target-text pseudo.
@@ -769,6 +940,7 @@ impl<'a, 'i> ::selectors::Parser<'i> for SelectorParser<'a> {
                 }
                 ServoTextControlInnerEditor
             },
+            "view-transition" => ViewTransition,
             "slider-fill" => SliderFill,
             "slider-thumb" => SliderThumb,
             "slider-track" => SliderTrack,
@@ -814,6 +986,24 @@ impl<'a, 'i> ::selectors::Parser<'i> for SelectorParser<'a> {
         };
 
         Ok(pseudo_element)
+    }
+
+    fn parse_functional_pseudo_element(
+        &self,
+        name: &str,
+        arguments: &mut CssParser<'i>,
+    ) -> Result<PseudoElement, ParseError> {
+        use self::PseudoElement::*;
+        let make: fn(PtNameAndClassSelector) -> PseudoElement = match_ignore_ascii_case! { name,
+            "view-transition-group" => ViewTransitionGroup,
+            "view-transition-image-pair" => ViewTransitionImagePair,
+            "view-transition-old" => ViewTransitionOld,
+            "view-transition-new" => ViewTransitionNew,
+            _ => return Err(ParseError::custom(
+                SelectorParseErrorKind::UnsupportedPseudoClassOrElement,
+            )),
+        };
+        Ok(make(PtNameAndClassSelector::parse(arguments)?))
     }
 
     fn default_namespace(&self) -> Option<Namespace> {
