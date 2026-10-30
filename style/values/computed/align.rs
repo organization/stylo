@@ -63,11 +63,11 @@ impl ToComputedValue for specified::JustifyItems {
     type ComputedValue = JustifyItems;
 
     /// <https://drafts.csswg.org/css-align/#valdef-justify-items-legacy>
-    fn to_computed_value(&self, _context: &Context) -> JustifyItems {
+    fn to_computed_value(&self, context: &Context) -> JustifyItems {
         use crate::values::specified::align;
         let specified = *self;
         let computed = if (self.0).0 != align::AlignFlags::LEGACY {
-            *self
+            Self(self.0.to_computed_value(context))
         } else {
             // If the inherited value of `justify-items` includes the
             // `legacy` keyword, `legacy` computes to the inherited value, but

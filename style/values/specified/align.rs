@@ -126,6 +126,30 @@ impl ToComputedValue for AlignFlags {
     }
 }
 
+macro_rules! compute_align_flags {
+    ($ty:ident, $field:tt) => {
+        impl ToComputedValue for $ty {
+            type ComputedValue = Self;
+
+            #[inline]
+            fn to_computed_value(&self, context: &Context) -> Self {
+                let mut computed = *self;
+                computed.$field = self.$field.to_computed_value(context);
+                computed
+            }
+
+            #[inline]
+            fn from_computed_value(computed: &Self) -> Self {
+                *computed
+            }
+        }
+    };
+}
+
+compute_align_flags!(ContentDistribution, primary);
+compute_align_flags!(SelfAlignment, 0);
+compute_align_flags!(ItemPlacement, 0);
+
 impl ToCss for AlignFlags {
     fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
     where
@@ -197,7 +221,6 @@ pub enum AxisDirection {
     MallocSizeOf,
     PartialEq,
     Serialize,
-    ToComputedValue,
     ToCss,
     ToResolvedValue,
     ToShmem,
@@ -334,7 +357,6 @@ impl SpecifiedValueInfo for ContentDistribution {
     MallocSizeOf,
     PartialEq,
     Serialize,
-    ToComputedValue,
     ToCss,
     ToResolvedValue,
     ToShmem,
@@ -464,7 +486,6 @@ impl SpecifiedValueInfo for SelfAlignment {
     MallocSizeOf,
     PartialEq,
     Serialize,
-    ToComputedValue,
     ToCss,
     ToResolvedValue,
     ToShmem,
