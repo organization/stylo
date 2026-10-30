@@ -2244,14 +2244,15 @@ impl Overflow {
     pub fn is_scrollable(&self) -> bool {
         matches!(*self, Self::Hidden | Self::Scroll | Self::Auto)
     }
-    /// Convert the value to a scrollable value if it's not already scrollable.
-    /// This maps `visible` to `auto` and `clip` to `hidden`.
+    /// The value used when the other axis is scrollable: `visible` computes to
+    /// `auto`, and `clip` stays as it is.
+    /// <https://drafts.csswg.org/css-overflow-3/#overflow-control>
     #[inline]
     pub fn to_scrollable(&self) -> Self {
         match *self {
             Self::Hidden | Self::Scroll | Self::Auto => *self,
             Self::Visible => Self::Auto,
-            Self::Clip => Self::Hidden,
+            Self::Clip => Self::Clip,
         }
     }
 }
