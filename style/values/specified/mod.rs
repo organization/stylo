@@ -44,7 +44,8 @@ pub use self::border::{
 };
 pub use self::box_::{
     AlignmentBaseline, Appearance, BackfaceVisibility, BaselineShift, BaselineSource,
-    BlockStepAlign, BlockStepInsert, BlockStepRound, BlockStepSize, BoxAlign,
+    BlockStepAlign, BlockStepInsert, BlockStepRound, BlockStepSize, ScrollAxisLock,
+    ScrollMarkerGroup, ScrollTargetGroup, BoxAlign,
     BoxCollapse, BoxDirection, BoxOrient, BoxPack, BreakBetween, BreakWithin, Clear, Contain,
     ContainIntrinsicSize, ContainerName, ContainerType, ContentVisibility, DirectionProperty,
     Display, DominantBaseline, Float, ImageOrientation, Isolation, LineClamp, MarginTrim, Orient,
@@ -125,7 +126,11 @@ pub use self::text::{
 pub use self::text::{InitialLetter, LetterSpacing, LineBreak, TextAlign, TextIndent};
 pub use self::text::{OverflowWrap, TextEmphasisPosition, TextEmphasisStyle, WordBreak};
 pub use self::text::{TextAlignKeyword, TextDecorationLine, TextOverflow, WordSpacing};
-pub use self::text::{TextAlignLast, TextAutospace, TextSpacingTrim, TextUnderlinePosition};
+pub use self::text::{
+    HangingPunctuation, TextAlignAll, TextAlignLast, TextAutospace, TextDecorationSkipSpaces,
+    TextGroupAlign, TextSizeAdjustAmount, TextSpacingTrim, TextUnderlinePosition,
+    WordSpaceTransform,
+};
 pub use self::text::{TextBoxEdge, TextBoxTrim};
 pub use self::text::{
     TextDecorationInset, TextDecorationLength, TextDecorationSkipInk, TextJustify, TextTransform,

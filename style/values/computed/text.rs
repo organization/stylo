@@ -25,13 +25,19 @@ use style_traits::{CssString, CssWriter, ToCss};
 use thin_vec::ThinVec;
 
 pub use crate::values::specified::text::{
-    HyphenateCharacter, Hyphens, LineBreak, MozControlCharacterVisibility, OverflowWrap, RubyAlign,
-    RubyPosition, TextAlignLast, TextAutospace, TextBoxEdge, TextBoxTrim, TextCombineUpright,
-    TextDecorationLine, TextDecorationSkipInk, TextDecorationStyle, TextEmphasisPosition,
-    TextJustify, TextOverflow, TextRendering, TextSecurity, TextSizeAdjust, TextSpacingTrim,
-    TextTransform, TextUnderlinePosition, TextWrapMode, TextWrapStyle, UnicodeBidi,
-    WhiteSpaceCollapse, WordBreak,
+    HangingPunctuation, HangingPunctuationKeyword, HyphenateCharacter, Hyphens, LineBreak,
+    MozControlCharacterVisibility, OverflowWrap, RubyAlign, RubyPosition, TextAlignAll,
+    TextAlignLast, TextAutospace, TextBoxEdge, TextBoxTrim, TextCombineUpright, TextDecorationLine,
+    TextDecorationSkipInk, TextDecorationSkipSpaces, TextDecorationStyle, TextEmphasisPosition,
+    TextGroupAlign, TextJustify, TextOverflow, TextRendering, TextSecurity, TextSizeAdjust,
+    TextSpacingTrim, TextTransform, TextUnderlinePosition, TextWrapMode, TextWrapStyle,
+    UnicodeBidi, WhiteSpaceCollapse, WordBreak, WordSpaceTransform, WordSpaceTransformKeyword,
 };
+
+/// A computed value for the `text-size-adjust` property.
+pub type TextSizeAdjustAmount = crate::values::specified::text::GenericTextSizeAdjustAmount<
+    crate::values::computed::NonNegativePercentage,
+>;
 
 /// A computed value for the `initial-letter` property.
 pub type InitialLetter = GenericInitialLetter<CSSFloat, CSSInteger>;

@@ -1924,3 +1924,332 @@ pub enum WhiteSpaceCollapse {
     #[cfg_attr(feature = "gecko", parse(aliases = "-moz-pre-space"))]
     PreserveSpaces,
 }
+
+/// The `text-group-align` property.
+/// <https://drafts.csswg.org/css-text-4/#text-group-align-property>
+#[allow(missing_docs)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    MallocSizeOf,
+    Parse,
+    PartialEq,
+    Serialize,
+    SpecifiedValueInfo,
+    ToComputedValue,
+    ToCss,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+#[repr(u8)]
+pub enum TextGroupAlign {
+    None,
+    Start,
+    End,
+    Left,
+    Right,
+    Center,
+}
+
+/// The `text-align-all` property.
+/// <https://drafts.csswg.org/css-text-3/#text-align-all-property>
+#[allow(missing_docs)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    MallocSizeOf,
+    Parse,
+    PartialEq,
+    Serialize,
+    SpecifiedValueInfo,
+    ToComputedValue,
+    ToCss,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+#[repr(u8)]
+pub enum TextAlignAll {
+    Start,
+    End,
+    Left,
+    Right,
+    Center,
+    Justify,
+    MatchParent,
+}
+
+/// The `text-decoration-skip-spaces` property:
+/// `none | all | [ start || end ]`.
+/// <https://drafts.csswg.org/css-text-decor-4/#text-decoration-skip-spaces-property>
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    MallocSizeOf,
+    Parse,
+    PartialEq,
+    Serialize,
+    SpecifiedValueInfo,
+    ToComputedValue,
+    ToCss,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+#[css(bitflags(single = "none,all", mixed = "start,end"))]
+#[repr(C)]
+pub struct TextDecorationSkipSpaces(u8);
+bitflags! {
+    impl TextDecorationSkipSpaces: u8 {
+        /// Spaces are not skipped.
+        const NONE = 0;
+        /// Every space is skipped.
+        const ALL = 1 << 0;
+        /// Spaces at the start of the line are skipped.
+        const START = 1 << 1;
+        /// Spaces at the end of the line are skipped.
+        const END = 1 << 2;
+    }
+}
+
+/// The `text-size-adjust` property: `auto | none | <percentage [0,∞]>`.
+/// <https://drafts.csswg.org/css-size-adjust/#adjustment-control>
+#[derive(
+    Clone,
+    Debug,
+    MallocSizeOf,
+    Parse,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToCss,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+#[repr(C, u8)]
+pub enum GenericTextSizeAdjustAmount<Percentage> {
+    /// `auto`
+    Auto,
+    /// `none`, which computes to `100%`.
+    None,
+    /// A percentage.
+    Percentage(Percentage),
+}
+
+/// A specified value for the `text-size-adjust` property.
+pub type TextSizeAdjustAmount =
+    GenericTextSizeAdjustAmount<crate::values::specified::NonNegativePercentage>;
+
+impl ToComputedValue for TextSizeAdjustAmount {
+    type ComputedValue = computed::text::TextSizeAdjustAmount;
+
+    fn to_computed_value(&self, context: &Context) -> Self::ComputedValue {
+        match *self {
+            Self::Auto => GenericTextSizeAdjustAmount::Auto,
+            Self::None => {
+                GenericTextSizeAdjustAmount::Percentage(computed::NonNegativePercentage::hundred())
+            },
+            Self::Percentage(ref percentage) => {
+                GenericTextSizeAdjustAmount::Percentage(percentage.to_computed_value(context))
+            },
+        }
+    }
+
+    fn from_computed_value(computed: &Self::ComputedValue) -> Self {
+        match *computed {
+            GenericTextSizeAdjustAmount::Percentage(ref percentage) => {
+                Self::Percentage(ToComputedValue::from_computed_value(percentage))
+            },
+            _ => Self::Auto,
+        }
+    }
+}
+
+/// A keyword of `hanging-punctuation`.
+#[allow(missing_docs)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    MallocSizeOf,
+    Parse,
+    PartialEq,
+    Serialize,
+    SpecifiedValueInfo,
+    ToComputedValue,
+    ToCss,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+#[repr(u8)]
+pub enum HangingPunctuationKeyword {
+    First,
+    ForceEnd,
+    AllowEnd,
+    Last,
+}
+
+/// The `hanging-punctuation` property:
+/// `none | [ first || [ force-end | allow-end ] || last ]`, which keeps the
+/// keywords in the order they were written.
+/// <https://drafts.csswg.org/css-text-4/#hanging-punctuation-property>
+#[derive(
+    Clone,
+    Debug,
+    MallocSizeOf,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+)]
+#[repr(C)]
+pub struct HangingPunctuation(pub crate::OwnedSlice<HangingPunctuationKeyword>);
+
+impl HangingPunctuation {
+    /// Returns `none`.
+    #[inline]
+    pub fn none() -> Self {
+        Self(Default::default())
+    }
+}
+
+impl Parse for HangingPunctuation {
+    fn parse<'i>(_: &ParserContext, input: &mut Parser<'i>) -> Result<Self, ParseError> {
+        use self::HangingPunctuationKeyword::*;
+        if input.try_parse(|i| i.expect_ident_matching("none")).is_ok() {
+            return Ok(Self::none());
+        }
+        let mut keywords = Vec::new();
+        while let Ok(keyword) = input.try_parse(|i| HangingPunctuationKeyword::parse(i)) {
+            let end = |k: &HangingPunctuationKeyword| matches!(k, ForceEnd | AllowEnd);
+            if keywords.contains(&keyword) || (end(&keyword) && keywords.iter().any(end)) {
+                return Err(ParseError::custom(StyleParseErrorKind::UnspecifiedError));
+            }
+            keywords.push(keyword);
+        }
+        if keywords.is_empty() {
+            return Err(ParseError::custom(StyleParseErrorKind::UnspecifiedError));
+        }
+        Ok(Self(keywords.into()))
+    }
+}
+
+impl ToCss for HangingPunctuation {
+    fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
+    where
+        W: Write,
+    {
+        if self.0.is_empty() {
+            return dest.write_str("none");
+        }
+        let mut writer = SequenceWriter::new(dest, " ");
+        for keyword in self.0.iter() {
+            writer.item(keyword)?;
+        }
+        Ok(())
+    }
+}
+
+impl crate::typed_om::ToTyped for HangingPunctuation {}
+
+/// A keyword of `word-space-transform`.
+#[allow(missing_docs)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    MallocSizeOf,
+    Parse,
+    PartialEq,
+    Serialize,
+    SpecifiedValueInfo,
+    ToComputedValue,
+    ToCss,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+#[repr(u8)]
+pub enum WordSpaceTransformKeyword {
+    Space,
+    IdeographicSpace,
+    AutoPhrase,
+}
+
+/// The `word-space-transform` property:
+/// `none | [ space | ideographic-space ] || auto-phrase`, which keeps the
+/// keywords in the order they were written.
+/// <https://drafts.csswg.org/css-text-4/#word-space-transform>
+#[derive(
+    Clone,
+    Debug,
+    MallocSizeOf,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+)]
+#[repr(C)]
+pub struct WordSpaceTransform(pub crate::OwnedSlice<WordSpaceTransformKeyword>);
+
+impl WordSpaceTransform {
+    /// Returns `none`.
+    #[inline]
+    pub fn none() -> Self {
+        Self(Default::default())
+    }
+}
+
+impl Parse for WordSpaceTransform {
+    fn parse<'i>(_: &ParserContext, input: &mut Parser<'i>) -> Result<Self, ParseError> {
+        use self::WordSpaceTransformKeyword::*;
+        if input.try_parse(|i| i.expect_ident_matching("none")).is_ok() {
+            return Ok(Self::none());
+        }
+        let mut keywords = Vec::new();
+        while let Ok(keyword) = input.try_parse(|i| WordSpaceTransformKeyword::parse(i)) {
+            let space = |k: &WordSpaceTransformKeyword| matches!(k, Space | IdeographicSpace);
+            if keywords.contains(&keyword) || (space(&keyword) && keywords.iter().any(space)) {
+                return Err(ParseError::custom(StyleParseErrorKind::UnspecifiedError));
+            }
+            keywords.push(keyword);
+        }
+        if !keywords
+            .iter()
+            .any(|k| matches!(k, Space | IdeographicSpace))
+        {
+            return Err(ParseError::custom(StyleParseErrorKind::UnspecifiedError));
+        }
+        Ok(Self(keywords.into()))
+    }
+}
+
+impl ToCss for WordSpaceTransform {
+    fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
+    where
+        W: Write,
+    {
+        if self.0.is_empty() {
+            return dest.write_str("none");
+        }
+        let mut writer = SequenceWriter::new(dest, " ");
+        for keyword in self.0.iter() {
+            writer.item(keyword)?;
+        }
+        Ok(())
+    }
+}
+
+impl crate::typed_om::ToTyped for WordSpaceTransform {}

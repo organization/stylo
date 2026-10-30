@@ -2780,6 +2780,87 @@ has_effect_on_gecko_scrollbars = false
 spec = "https://drafts.csswg.org/css-text-4/#text-autospace-property"
 affects = "layout"
 
+[scroll-axis-lock]
+type = "ScrollAxisLock"
+initial = "computed::ScrollAxisLock::Auto"
+struct = "box"
+engine = "servo"
+animation_type = "discrete"
+spec = "https://drafts.csswg.org/css-overflow-5/#scroll-axis-lock"
+affects = "layout"
+
+[scroll-target-group]
+type = "ScrollTargetGroup"
+initial = "computed::ScrollTargetGroup::None"
+struct = "box"
+engine = "servo"
+animation_type = "discrete"
+spec = "https://drafts.csswg.org/css-overflow-5/#scroll-target-group"
+affects = "layout"
+
+[scroll-marker-group]
+type = "ScrollMarkerGroup"
+initial = "computed::ScrollMarkerGroup::none()"
+struct = "box"
+engine = "servo"
+animation_type = "discrete"
+spec = "https://drafts.csswg.org/css-overflow-5/#scroll-marker-group-property"
+affects = "layout"
+
+[text-group-align]
+type = "TextGroupAlign"
+initial = "computed::TextGroupAlign::None"
+struct = "text"
+engine = "servo"
+animation_type = "discrete"
+spec = "https://drafts.csswg.org/css-text-4/#text-group-align-property"
+affects = "layout"
+
+[text-align-all]
+type = "TextAlignAll"
+initial = "computed::TextAlignAll::Start"
+struct = "inherited_text"
+engine = "servo"
+animation_type = "discrete"
+spec = "https://drafts.csswg.org/css-text-3/#text-align-all-property"
+affects = "layout"
+
+[text-decoration-skip-spaces]
+type = "TextDecorationSkipSpaces"
+initial = "computed::TextDecorationSkipSpaces::START | computed::TextDecorationSkipSpaces::END"
+struct = "inherited_text"
+engine = "servo"
+animation_type = "discrete"
+spec = "https://drafts.csswg.org/css-text-decor-4/#text-decoration-skip-spaces-property"
+affects = "overflow"
+
+[text-size-adjust]
+type = "TextSizeAdjustAmount"
+initial = "computed::TextSizeAdjustAmount::Auto"
+struct = "inherited_text"
+engine = "servo"
+animation_type = "discrete"
+spec = "https://drafts.csswg.org/css-size-adjust/#adjustment-control"
+affects = "layout"
+
+[hanging-punctuation]
+type = "HangingPunctuation"
+initial = "computed::HangingPunctuation::none()"
+struct = "inherited_text"
+engine = "servo"
+animation_type = "discrete"
+spec = "https://drafts.csswg.org/css-text-4/#hanging-punctuation-property"
+affects = "layout"
+
+[word-space-transform]
+type = "WordSpaceTransform"
+initial = "computed::WordSpaceTransform::none()"
+struct = "inherited_text"
+engine = "servo"
+animation_type = "discrete"
+spec = "https://drafts.csswg.org/css-text-4/#word-space-transform"
+affects = "layout"
+
 [text-spacing-trim]
 type = "TextSpacingTrim"
 initial = "computed::TextSpacingTrim::Normal"

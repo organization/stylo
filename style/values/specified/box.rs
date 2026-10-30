@@ -2720,3 +2720,186 @@ pub enum DirectionProperty {
     Ltr,
     Rtl,
 }
+
+/// The `scroll-axis-lock` property.
+/// <https://drafts.csswg.org/css-overflow-5/#scroll-axis-lock>
+#[allow(missing_docs)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    MallocSizeOf,
+    Parse,
+    PartialEq,
+    Serialize,
+    SpecifiedValueInfo,
+    ToComputedValue,
+    ToCss,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+#[repr(u8)]
+pub enum ScrollAxisLock {
+    None,
+    Auto,
+}
+
+/// The `scroll-target-group` property.
+/// <https://drafts.csswg.org/css-overflow-5/#scroll-target-group>
+#[allow(missing_docs)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    MallocSizeOf,
+    Parse,
+    PartialEq,
+    Serialize,
+    SpecifiedValueInfo,
+    ToComputedValue,
+    ToCss,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+#[repr(u8)]
+pub enum ScrollTargetGroup {
+    None,
+    Auto,
+}
+
+/// Where the scroll marker group of `scroll-marker-group` is placed.
+#[allow(missing_docs)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    MallocSizeOf,
+    Parse,
+    PartialEq,
+    Serialize,
+    SpecifiedValueInfo,
+    ToComputedValue,
+    ToCss,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+#[repr(u8)]
+pub enum ScrollMarkerGroupPosition {
+    None,
+    Before,
+    After,
+}
+
+/// How the scroll markers of `scroll-marker-group` behave.
+#[allow(missing_docs)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    MallocSizeOf,
+    Parse,
+    PartialEq,
+    Serialize,
+    SpecifiedValueInfo,
+    ToComputedValue,
+    ToCss,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+#[repr(u8)]
+pub enum ScrollMarkerGroupMode {
+    Links,
+    Tabs,
+}
+
+/// The `scroll-marker-group` property:
+/// `none | [ before | after ] || [ links | tabs ]`.
+/// <https://drafts.csswg.org/css-overflow-5/#scroll-marker-group-property>
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    MallocSizeOf,
+    PartialEq,
+    Serialize,
+    SpecifiedValueInfo,
+    ToResolvedValue,
+    ToShmem,
+)]
+#[repr(C)]
+pub struct ScrollMarkerGroup {
+    /// The position of the group, `none` if there is no group.
+    pub position: ScrollMarkerGroupPosition,
+    /// The mode, if one was given.
+    pub mode: Option<ScrollMarkerGroupMode>,
+}
+
+impl ScrollMarkerGroup {
+    /// Returns `none`.
+    #[inline]
+    pub fn none() -> Self {
+        Self {
+            position: ScrollMarkerGroupPosition::None,
+            mode: None,
+        }
+    }
+}
+
+impl Parse for ScrollMarkerGroup {
+    fn parse<'i>(_: &ParserContext, input: &mut Parser<'i>) -> Result<Self, ParseError> {
+        if input.try_parse(|i| i.expect_ident_matching("none")).is_ok() {
+            return Ok(Self::none());
+        }
+        let position = ScrollMarkerGroupPosition::parse(input)?;
+        if position == ScrollMarkerGroupPosition::None {
+            return Err(ParseError::custom(StyleParseErrorKind::UnspecifiedError));
+        }
+        let mode = input.try_parse(|i| ScrollMarkerGroupMode::parse(i)).ok();
+        Ok(Self { position, mode })
+    }
+}
+
+impl ToCss for ScrollMarkerGroup {
+    fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
+    where
+        W: Write,
+    {
+        self.position.to_css(dest)?;
+        if let Some(mode) = self.mode {
+            dest.write_char(' ')?;
+            mode.to_css(dest)?;
+        }
+        Ok(())
+    }
+}
+
+impl ToTyped for ScrollMarkerGroup {}
+
+impl crate::values::computed::ToComputedValue for ScrollMarkerGroup {
+    type ComputedValue = Self;
+
+    #[inline]
+    fn to_computed_value(&self, _: &crate::values::computed::Context) -> Self {
+        if self.position == ScrollMarkerGroupPosition::None {
+            return *self;
+        }
+        Self {
+            position: self.position,
+            mode: Some(self.mode.unwrap_or(ScrollMarkerGroupMode::Links)),
+        }
+    }
+
+    #[inline]
+    fn from_computed_value(computed: &Self) -> Self {
+        *computed
+    }
+}
