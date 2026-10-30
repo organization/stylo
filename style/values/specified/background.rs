@@ -196,20 +196,15 @@ pub enum BackgroundClip {
     // TODO(emilio): We should expose the svg values in SpecifiedValueInfo or so but only for
     // mask-clip... Maybe we need a newtype thing, or to rejigger the painting code / storage
     // further.
-    #[cfg(feature = "gecko")]
     #[value_info(skip)]
     FillBox,
-    #[cfg(feature = "gecko")]
     #[value_info(skip)]
     StrokeBox,
-    #[cfg(feature = "gecko")]
     #[value_info(skip)]
     ViewBox,
-    #[cfg(feature = "gecko")]
     #[value_info(skip)]
     NoClip,
     // TODO: text and border-area are supposed to combine in backgrounds-4...
-    #[cfg(feature = "gecko")]
     Text,
     #[parse(condition = "background_clip_border_area_enabled")]
     #[value_info(skip)]
@@ -232,16 +227,11 @@ impl BackgroundClip {
             Self::BorderBox => ClipValidity::BOTH,
             Self::PaddingBox => ClipValidity::BOTH,
             Self::ContentBox => ClipValidity::BOTH,
-            #[cfg(feature = "gecko")]
-            Self::FillBox => ClipValidity::MASK,
-            #[cfg(feature = "gecko")]
-            Self::StrokeBox => ClipValidity::MASK,
-            #[cfg(feature = "gecko")]
-            Self::ViewBox => ClipValidity::MASK,
-            #[cfg(feature = "gecko")]
-            Self::NoClip => ClipValidity::MASK,
-            #[cfg(feature = "gecko")]
-            Self::Text => ClipValidity::BACKGROUND,
+                    Self::FillBox => ClipValidity::MASK,
+                    Self::StrokeBox => ClipValidity::MASK,
+                    Self::ViewBox => ClipValidity::MASK,
+                    Self::NoClip => ClipValidity::MASK,
+                    Self::Text => ClipValidity::BACKGROUND,
             Self::BorderArea => ClipValidity::BACKGROUND,
         }
     }
@@ -297,13 +287,10 @@ pub enum BackgroundOrigin {
     PaddingBox,
     ContentBox,
     // TODO(emilio): Same caveat as BackgroundClip regarding SpecifiedValueInfo.
-    #[cfg(feature = "gecko")]
     #[value_info(skip)]
     FillBox,
-    #[cfg(feature = "gecko")]
     #[value_info(skip)]
     StrokeBox,
-    #[cfg(feature = "gecko")]
     #[value_info(skip)]
     ViewBox,
 }
@@ -316,8 +303,7 @@ impl BackgroundOrigin {
         input: &mut Parser,
     ) -> Result<Self, ParseError> {
         let origin = Self::parse(input)?;
-        #[cfg(feature = "gecko")]
-        if matches!(origin, Self::FillBox | Self::StrokeBox | Self::ViewBox) {
+            if matches!(origin, Self::FillBox | Self::StrokeBox | Self::ViewBox) {
             return Err(ParseError::custom(StyleParseErrorKind::UnspecifiedError));
         }
         Ok(origin)
@@ -330,12 +316,9 @@ impl From<BackgroundOrigin> for BackgroundClip {
             BackgroundOrigin::BorderBox => Self::BorderBox,
             BackgroundOrigin::PaddingBox => Self::PaddingBox,
             BackgroundOrigin::ContentBox => Self::ContentBox,
-            #[cfg(feature = "gecko")]
-            BackgroundOrigin::FillBox => Self::FillBox,
-            #[cfg(feature = "gecko")]
-            BackgroundOrigin::StrokeBox => Self::StrokeBox,
-            #[cfg(feature = "gecko")]
-            BackgroundOrigin::ViewBox => Self::ViewBox,
+                    BackgroundOrigin::FillBox => Self::FillBox,
+                    BackgroundOrigin::StrokeBox => Self::StrokeBox,
+                    BackgroundOrigin::ViewBox => Self::ViewBox,
         }
     }
 }
