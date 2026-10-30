@@ -1984,6 +1984,13 @@ pub enum BreakBetween {
     Avoid,
     Left,
     Right,
+    AvoidPage,
+    Recto,
+    Verso,
+    AvoidColumn,
+    Column,
+    AvoidRegion,
+    Region,
 }
 
 impl BreakBetween {
@@ -1999,7 +2006,16 @@ impl BreakBetween {
             BreakBetween::Auto | BreakBetween::Avoid | BreakBetween::Left | BreakBetween::Right => {
                 Ok(break_value)
             },
-            BreakBetween::Page => Err(ParseError::custom(StyleParseErrorKind::UnspecifiedError)),
+            BreakBetween::Page
+            | BreakBetween::AvoidPage
+            | BreakBetween::Recto
+            | BreakBetween::Verso
+            | BreakBetween::AvoidColumn
+            | BreakBetween::Column
+            | BreakBetween::AvoidRegion
+            | BreakBetween::Region => {
+                Err(ParseError::custom(StyleParseErrorKind::UnspecifiedError))
+            },
         }
     }
 
@@ -2016,7 +2032,14 @@ impl BreakBetween {
                 self.to_css(dest)
             },
             BreakBetween::Page => dest.write_str("always"),
-            BreakBetween::Always => Ok(()),
+            BreakBetween::Always
+            | BreakBetween::AvoidPage
+            | BreakBetween::Recto
+            | BreakBetween::Verso
+            | BreakBetween::AvoidColumn
+            | BreakBetween::Column
+            | BreakBetween::AvoidRegion
+            | BreakBetween::Region => Ok(()),
         }
     }
 }
@@ -2047,6 +2070,7 @@ pub enum BreakWithin {
     Avoid,
     AvoidPage,
     AvoidColumn,
+    AvoidRegion,
 }
 
 impl BreakWithin {
@@ -2059,7 +2083,7 @@ impl BreakWithin {
         let break_value = BreakWithin::parse(input)?;
         match break_value {
             BreakWithin::Auto | BreakWithin::Avoid => Ok(break_value),
-            BreakWithin::AvoidPage | BreakWithin::AvoidColumn => {
+            BreakWithin::AvoidPage | BreakWithin::AvoidColumn | BreakWithin::AvoidRegion => {
                 Err(ParseError::custom(StyleParseErrorKind::UnspecifiedError))
             },
         }
@@ -2075,7 +2099,7 @@ impl BreakWithin {
     {
         match *self {
             BreakWithin::Auto | BreakWithin::Avoid => self.to_css(dest),
-            BreakWithin::AvoidPage | BreakWithin::AvoidColumn => Ok(()),
+            BreakWithin::AvoidPage | BreakWithin::AvoidColumn | BreakWithin::AvoidRegion => Ok(()),
         }
     }
 }
