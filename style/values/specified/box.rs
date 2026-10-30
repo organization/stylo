@@ -139,6 +139,7 @@ pub enum DisplayOutside {
     TableCaption,
     InternalTable,
     InternalRuby,
+    RunIn,
 }
 
 #[allow(missing_docs)]
@@ -422,7 +423,7 @@ impl Display {
         }
 
         match self.outside() {
-            DisplayOutside::Inline => {
+            DisplayOutside::Inline | DisplayOutside::RunIn => {
                 let inside = match self.inside() {
                     // `inline-block` blockifies to `block` rather than
                     // `flow-root`, for legacy reasons.
@@ -507,6 +508,7 @@ impl DisplayKeyword {
             /// https://drafts.csswg.org/css-display/#typedef-display-outside
             "block" => Outside(DisplayOutside::Block),
             "inline" => Outside(DisplayOutside::Inline),
+            "run-in" => Outside(DisplayOutside::RunIn),
 
             "list-item" => ListItem,
 
@@ -543,6 +545,17 @@ impl ToCss for Display {
                 (DisplayOutside::Inline, DisplayInside::Flex) => dest.write_str("inline-flex"),
                 (DisplayOutside::Inline, DisplayInside::Table) => dest.write_str("inline-table"),
                 (DisplayOutside::Block, DisplayInside::Ruby) => dest.write_str("block ruby"),
+                (DisplayOutside::RunIn, inside) => {
+                    dest.write_str("run-in")?;
+                    if inside != DisplayInside::Flow {
+                        dest.write_char(' ')?;
+                        inside.to_css(dest)?;
+                    }
+                    if self.is_list_item() {
+                        dest.write_str(" list-item")?;
+                    }
+                    Ok(())
+                },
                 (_, inside) => {
                     if self.is_list_item() {
                         if outside != DisplayOutside::Block {
@@ -1670,6 +1683,91 @@ impl Parse for ContainerName {
 
 /// A specified value for the `perspective` property.
 pub type Perspective = GenericPerspective<NonNegativeLength>;
+
+/// A specified value for the `block-step-size` property: `none | <length [0,∞]>`.
+pub type BlockStepSize = crate::values::generics::box_::GenericBlockStepSize<NonNegativeLength>;
+
+/// The `block-step-insert` property.
+/// <https://drafts.csswg.org/css-rhythm/#block-step-insert>
+#[allow(missing_docs)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Deserialize,
+    Eq,
+    MallocSizeOf,
+    Parse,
+    PartialEq,
+    Serialize,
+    SpecifiedValueInfo,
+    ToComputedValue,
+    ToCss,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+#[repr(u8)]
+pub enum BlockStepInsert {
+    MarginBox,
+    PaddingBox,
+    ContentBox,
+}
+
+/// The `block-step-align` property.
+/// <https://drafts.csswg.org/css-rhythm/#block-step-align>
+#[allow(missing_docs)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Deserialize,
+    Eq,
+    MallocSizeOf,
+    Parse,
+    PartialEq,
+    Serialize,
+    SpecifiedValueInfo,
+    ToComputedValue,
+    ToCss,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+#[repr(u8)]
+pub enum BlockStepAlign {
+    Auto,
+    Center,
+    Start,
+    End,
+}
+
+/// The `block-step-round` property.
+/// <https://drafts.csswg.org/css-rhythm/#block-step-round>
+#[allow(missing_docs)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Deserialize,
+    Eq,
+    MallocSizeOf,
+    Parse,
+    PartialEq,
+    Serialize,
+    SpecifiedValueInfo,
+    ToComputedValue,
+    ToCss,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+#[repr(u8)]
+pub enum BlockStepRound {
+    Up,
+    Down,
+    Nearest,
+}
 
 impl Perspective {
     /// Parses a `-webkit-perspective` value.

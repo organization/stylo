@@ -738,6 +738,169 @@ pub mod offset {
     }
 }
 
+pub mod text_spacing {
+    pub use crate::properties::generated::shorthands::text_spacing::*;
+
+    use super::*;
+    use crate::properties::longhands::{text_autospace, text_spacing_trim};
+    use crate::values::specified::{TextAutospace, TextSpacingTrim};
+
+    fn parse_pair<'i>(
+        context: &ParserContext,
+        input: &mut Parser<'i>,
+        trim_first: bool,
+    ) -> Result<(TextSpacingTrim, TextAutospace), ParseError> {
+        let mut trim = None;
+        let mut autospace = None;
+        for index in 0..2 {
+            if (index == 0) == trim_first {
+                if trim.is_none() {
+                    trim = input.try_parse(|i| text_spacing_trim::parse(context, i)).ok();
+                }
+            } else if autospace.is_none() {
+                autospace = input.try_parse(|i| text_autospace::parse(context, i)).ok();
+            }
+        }
+        input.expect_exhausted()?;
+        let trim = trim.unwrap_or(TextSpacingTrim::Normal);
+        let autospace = autospace.unwrap_or(TextAutospace::NORMAL);
+        if trim == TextSpacingTrim::Auto || autospace == TextAutospace::AUTO {
+            return Err(ParseError::custom(StyleParseErrorKind::UnspecifiedError));
+        }
+        Ok((trim, autospace))
+    }
+
+    pub fn parse_value(
+        context: &ParserContext,
+        input: &mut Parser,
+    ) -> Result<Longhands, ParseError> {
+        let (trim, autospace) = if input.try_parse(|i| i.expect_ident_matching("none")).is_ok() {
+            (TextSpacingTrim::SpaceAll, TextAutospace::NO_AUTOSPACE)
+        } else if input.try_parse(|i| i.expect_ident_matching("auto")).is_ok() {
+            (TextSpacingTrim::Auto, TextAutospace::AUTO)
+        } else if let Ok(pair) = input.try_parse(|i| parse_pair(context, i, true)) {
+            pair
+        } else {
+            parse_pair(context, input, false)?
+        };
+        Ok(expanded! {
+            text_spacing_trim: trim,
+            text_autospace: autospace,
+        })
+    }
+
+    impl<'a> ToCss for LonghandsToSerialize<'a> {
+        fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
+        where
+            W: fmt::Write,
+        {
+            let trim = *self.text_spacing_trim;
+            let autospace = *self.text_autospace;
+            if trim == TextSpacingTrim::SpaceAll && autospace == TextAutospace::NO_AUTOSPACE {
+                return dest.write_str("none");
+            }
+            if trim == TextSpacingTrim::Auto && autospace == TextAutospace::AUTO {
+                return dest.write_str("auto");
+            }
+            if trim == TextSpacingTrim::Auto || autospace == TextAutospace::AUTO {
+                return Ok(());
+            }
+            let mut writer = SequenceWriter::new(dest, " ");
+            if trim != TextSpacingTrim::Normal {
+                writer.item(&trim)?;
+            }
+            if autospace != TextAutospace::NORMAL {
+                writer.item(&autospace)?;
+            }
+            if !writer.has_written() {
+                writer.raw_item("normal")?;
+            }
+            Ok(())
+        }
+    }
+}
+
+pub mod block_step {
+    pub use crate::properties::generated::shorthands::block_step::*;
+
+    use super::*;
+    use crate::properties::longhands::{
+        block_step_align, block_step_insert, block_step_round, block_step_size,
+    };
+    use crate::values::specified::{BlockStepAlign, BlockStepInsert, BlockStepRound};
+
+    pub fn parse_value(
+        context: &ParserContext,
+        input: &mut Parser,
+    ) -> Result<Longhands, ParseError> {
+        let mut size = None;
+        let mut insert = None;
+        let mut align = None;
+        let mut round = None;
+        loop {
+            if size.is_none() {
+                if let Ok(value) = input.try_parse(|i| block_step_size::parse(context, i)) {
+                    size = Some(value);
+                    continue;
+                }
+            }
+            if insert.is_none() {
+                if let Ok(value) = input.try_parse(|i| block_step_insert::parse(context, i)) {
+                    insert = Some(value);
+                    continue;
+                }
+            }
+            if align.is_none() {
+                if let Ok(value) = input.try_parse(|i| block_step_align::parse(context, i)) {
+                    align = Some(value);
+                    continue;
+                }
+            }
+            if round.is_none() {
+                if let Ok(value) = input.try_parse(|i| block_step_round::parse(context, i)) {
+                    round = Some(value);
+                    continue;
+                }
+            }
+            break;
+        }
+        if size.is_none() && insert.is_none() && align.is_none() && round.is_none() {
+            return Err(ParseError::custom(StyleParseErrorKind::UnspecifiedError));
+        }
+        Ok(expanded! {
+            block_step_size: unwrap_or_initial!(block_step_size, size),
+            block_step_insert: unwrap_or_initial!(block_step_insert, insert),
+            block_step_align: unwrap_or_initial!(block_step_align, align),
+            block_step_round: unwrap_or_initial!(block_step_round, round),
+        })
+    }
+
+    impl<'a> ToCss for LonghandsToSerialize<'a> {
+        fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
+        where
+            W: fmt::Write,
+        {
+            let mut writer = SequenceWriter::new(dest, " ");
+            if !self.block_step_size.is_none() {
+                writer.item(self.block_step_size)?;
+            }
+            if *self.block_step_insert != BlockStepInsert::MarginBox {
+                writer.item(self.block_step_insert)?;
+            }
+            if *self.block_step_align != BlockStepAlign::Auto {
+                writer.item(self.block_step_align)?;
+            }
+            if *self.block_step_round != BlockStepRound::Up {
+                writer.item(self.block_step_round)?;
+            }
+            if !writer.has_written() {
+                writer.raw_item("none")?;
+            }
+            Ok(())
+        }
+    }
+}
+
 pub mod columns {
     pub use crate::properties::generated::shorthands::columns::*;
 

@@ -470,6 +470,18 @@ kind = "two_properties"
 sub_properties = ["outline-color", "outline-style", "outline-width"]
 spec = "https://drafts.csswg.org/css-ui/#propdef-outline"
 
+[text-spacing]
+engine = "servo"
+servo_pref = "layout.css.text-autospace.enabled"
+sub_properties = ["text-spacing-trim", "text-autospace"]
+spec = "https://drafts.csswg.org/css-text-4/#text-spacing-property"
+
+[block-step]
+engine = "servo"
+servo_pref = "layout.css.block-step.enabled"
+sub_properties = ["block-step-size", "block-step-insert", "block-step-align", "block-step-round"]
+spec = "https://drafts.csswg.org/css-rhythm/#block-step"
+
 [columns]
 sub_properties = ["column-width", "column-count"]
 spec = "https://drafts.csswg.org/css-multicol/#propdef-columns"

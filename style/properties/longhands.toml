@@ -1825,6 +1825,46 @@ animation_type = "none"
 spec = "Nonstandard (https://developer.mozilla.org/en-US/docs/Web/CSS/-moz-context-properties)"
 affects = "paint"
 
+[block-step-size]
+type = "BlockStepSize"
+initial = "computed::BlockStepSize::none()"
+struct = "box"
+servo_pref = "layout.css.block-step.enabled"
+engine = "servo"
+animation_type = "discrete"
+spec = "https://drafts.csswg.org/css-rhythm/#block-step-size"
+affects = "layout"
+
+[block-step-insert]
+type = "BlockStepInsert"
+initial = "computed::BlockStepInsert::MarginBox"
+struct = "box"
+servo_pref = "layout.css.block-step.enabled"
+engine = "servo"
+animation_type = "discrete"
+spec = "https://drafts.csswg.org/css-rhythm/#block-step-insert"
+affects = "layout"
+
+[block-step-align]
+type = "BlockStepAlign"
+initial = "computed::BlockStepAlign::Auto"
+struct = "box"
+servo_pref = "layout.css.block-step.enabled"
+engine = "servo"
+animation_type = "discrete"
+spec = "https://drafts.csswg.org/css-rhythm/#block-step-align"
+affects = "layout"
+
+[block-step-round]
+type = "BlockStepRound"
+initial = "computed::BlockStepRound::Up"
+struct = "box"
+servo_pref = "layout.css.block-step.enabled"
+engine = "servo"
+animation_type = "discrete"
+spec = "https://drafts.csswg.org/css-rhythm/#block-step-round"
+affects = "layout"
+
 [perspective]
 type = "Perspective"
 initial = "computed::Perspective::none()"
@@ -2731,13 +2771,23 @@ affects = "layout"
 
 [text-autospace]
 type = "TextAutospace"
-initial = "computed::text::TextAutospace::NO_AUTOSPACE"
+initial = "computed::text::TextAutospace::NORMAL"
 struct = "inherited_text"
 servo_pref = "layout.css.text-autospace.enabled"
 animation_type = "discrete"
 gecko_pref = "layout.css.text-autospace.enabled"
 has_effect_on_gecko_scrollbars = false
 spec = "https://drafts.csswg.org/css-text-4/#text-autospace-property"
+affects = "layout"
+
+[text-spacing-trim]
+type = "TextSpacingTrim"
+initial = "computed::TextSpacingTrim::Normal"
+struct = "inherited_text"
+engine = "servo"
+servo_pref = "layout.css.text-autospace.enabled"
+animation_type = "discrete"
+spec = "https://drafts.csswg.org/css-text-4/#text-spacing-trim-property"
 affects = "layout"
 
 [text-box-edge]

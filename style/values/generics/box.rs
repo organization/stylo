@@ -378,6 +378,44 @@ pub enum GenericPerspective<NonNegativeLength> {
 
 pub use self::GenericPerspective as Perspective;
 
+/// A generic value for the `block-step-size` property: `none | <length [0,∞]>`.
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    MallocSizeOf,
+    Parse,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToAnimatedValue,
+    ToComputedValue,
+    ToCss,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+#[repr(C, u8)]
+pub enum GenericBlockStepSize<NonNegativeLength> {
+    /// A non-negative length.
+    Length(NonNegativeLength),
+    /// The keyword `none`.
+    None,
+}
+
+impl<L> GenericBlockStepSize<L> {
+    /// Returns `none`.
+    #[inline]
+    pub fn none() -> Self {
+        Self::None
+    }
+
+    /// Whether this is `none`.
+    #[inline]
+    pub fn is_none(&self) -> bool {
+        matches!(self, Self::None)
+    }
+}
+
 impl<L> Perspective<L> {
     /// Returns `none`.
     #[inline]

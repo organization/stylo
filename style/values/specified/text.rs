@@ -1271,7 +1271,6 @@ impl SpecifiedValueInfo for RubyPosition {
 ///
 /// https://drafts.csswg.org/css-text-4/#text-autospace-property
 ///
-/// Bug 1980111: 'replace' value is not supported yet.
 #[derive(
     Clone,
     Copy,
@@ -1290,11 +1289,8 @@ impl SpecifiedValueInfo for RubyPosition {
 )]
 #[css(bitflags(
     single = "normal,auto,no-autospace",
-    // Bug 1980111: add 'replace' to 'mixed' in the future so that it parses correctly.
-    // Bug 1986500: add 'punctuation' to 'mixed' in the future so that it parses correctly.
-    mixed = "ideograph-alpha,ideograph-numeric,insert",
-    // Bug 1980111: Uncomment 'validate_mixed' to support 'replace' value.
-    // validate_mixed = "Self::validate_mixed_flags",
+    mixed = "ideograph-alpha,ideograph-numeric,punctuation,insert,replace",
+    validate_mixed = "Self::validate_mixed_flags",
 ))]
 #[repr(C)]
 pub struct TextAutospace(u8);
@@ -1315,29 +1311,59 @@ bitflags! {
         /// 1/8ic space between ideographic characters and non-ideographic decimal numerals.
         const IDEOGRAPH_NUMERIC = 1 << 3;
 
-        /* Bug 1986500: Uncomment the following to support the 'punctuation' value.
         /// Apply special spacing between letters and punctuation (French).
         const PUNCTUATION = 1 << 4;
-        */
 
         /// Auto-spacing is only inserted if no space character is present in the text.
         const INSERT = 1 << 5;
 
-        /* Bug 1980111: Uncomment the following to support 'replace' value.
         /// Auto-spacing may replace an existing U+0020 space with custom space.
         const REPLACE = 1 << 6;
-        */
     }
 }
 
-/* Bug 1980111: Uncomment the following to support 'replace' value.
 impl TextAutospace {
     fn validate_mixed_flags(&self) -> bool {
-        // It's not valid to have both INSERT and REPLACE set.
+        // It's not valid to have both INSERT and REPLACE set, and either needs
+        // a kind of spacing to apply to.
         !self.contains(TextAutospace::INSERT | TextAutospace::REPLACE)
+            && self.intersects(
+                TextAutospace::IDEOGRAPH_ALPHA
+                    | TextAutospace::IDEOGRAPH_NUMERIC
+                    | TextAutospace::PUNCTUATION,
+            )
     }
 }
-*/
+
+/// The `text-spacing-trim` property.
+/// <https://drafts.csswg.org/css-text-4/#text-spacing-trim-property>
+#[allow(missing_docs)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    MallocSizeOf,
+    Parse,
+    PartialEq,
+    Serialize,
+    SpecifiedValueInfo,
+    ToComputedValue,
+    ToCss,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+#[repr(u8)]
+pub enum TextSpacingTrim {
+    Normal,
+    SpaceAll,
+    SpaceFirst,
+    TrimStart,
+    TrimBoth,
+    TrimAll,
+    Auto,
+}
 #[derive(
     Clone,
     Copy,

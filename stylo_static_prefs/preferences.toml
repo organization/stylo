@@ -38,6 +38,7 @@
 "layout.css.font-variations.enabled" = false
 "layout.css.forced-color-adjust.enabled" = false
 "layout.css.gap-decorations.enabled" = false
+"layout.css.block-step.enabled" = false
 "layout.css.grid-template-subgrid-value.enabled" = false
 "layout.css.has-selector.enabled" = false
 "layout.css.hyphens.enabled" = false

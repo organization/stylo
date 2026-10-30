@@ -18,7 +18,7 @@ use std::fmt;
 use style_traits::{CssWriter, ToCss};
 
 pub use crate::values::specified::box_::{
-    AlignmentBaseline, Appearance, BackfaceVisibility, BaselineSource, BoxAlign, BoxCollapse,
+    AlignmentBaseline, BlockStepAlign, BlockStepInsert, BlockStepRound, Appearance, BackfaceVisibility, BaselineSource, BoxAlign, BoxCollapse,
     BoxDirection, BoxOrient, BoxPack, BreakBetween, BreakWithin, Clear, Contain, ContainerName,
     ContainerType, ContentVisibility, DirectionProperty, Display, DominantBaseline, Float,
     ImageOrientation, Isolation, MarginTrim, Orient, Overflow, OverflowAnchor, OverscrollBehavior,
@@ -55,6 +55,9 @@ pub type LineClamp = GenericLineClamp<GreaterThanOrEqualToOne<Integer>>;
 
 /// A computed value for the `perspective` property.
 pub type Perspective = GenericPerspective<NonNegativeLength>;
+
+/// A computed value for the `block-step-size` property.
+pub type BlockStepSize = crate::values::generics::box_::GenericBlockStepSize<NonNegativeLength>;
 
 /// A computed value for the `resize` property.
 #[allow(missing_docs)]
