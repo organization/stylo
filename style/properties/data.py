@@ -1321,6 +1321,7 @@ class PropertyRestrictions:
         return props
 
     # https://drafts.csswg.org/css-lists-3/#marker-properties
+    # https://drafts.csswg.org/css-pseudo-4/#marker-pseudo
     @staticmethod
     def marker(data):
         return set(
@@ -1333,9 +1334,14 @@ class PropertyRestrictions:
                 "cursor",
                 "direction",
                 "hyphens",
+                "letter-spacing",
+                "line-break",
                 "line-height",
+                "overflow-wrap",
                 "quotes",
+                "tab-size",
                 "text-combine-upright",
+                "text-decoration-skip-ink",
                 "text-emphasis-color",
                 "text-emphasis-position",
                 "text-emphasis-style",
@@ -1343,6 +1349,8 @@ class PropertyRestrictions:
                 "text-shadow",
                 "text-transform",
                 "unicode-bidi",
+                "word-break",
+                "word-spacing",
                 "-moz-osx-font-smoothing",
             ]
             + PropertyRestrictions.shorthand(data, "animation-range")
