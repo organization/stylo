@@ -384,7 +384,7 @@ impl ToCss for StyleFeaturePlain {
             },
             StyleFeatureValue::Value(Some(ref v)) => {
                 dest.write_str(": ")?;
-                v.to_css(dest)?;
+                dest.write_str(v.css_text())?;
             },
             StyleFeatureValue::Value(None) => (),
         }
