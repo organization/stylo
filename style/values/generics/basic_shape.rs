@@ -350,19 +350,46 @@ pub use self::GenericShapeRadius as ShapeRadius;
     SpecifiedValueInfo,
     ToAnimatedValue,
     ToComputedValue,
-    ToCss,
     ToResolvedValue,
     ToShmem,
 )]
-#[css(comma, function = "polygon")]
 #[repr(C)]
 pub struct GenericPolygon<LengthPercentage> {
     /// The filling rule for a polygon.
-    #[css(skip_if = "is_default")]
     pub fill: FillRule,
+    /// The `round` radius of the corners, which is always a length.
+    pub round: Option<LengthPercentage>,
     /// A collection of (x, y) coordinates to draw the polygon.
-    #[css(iterable)]
     pub coordinates: crate::OwnedSlice<PolygonCoord<LengthPercentage>>,
+}
+
+impl<L: ToCss> ToCss for GenericPolygon<L> {
+    fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
+    where
+        W: Write,
+    {
+        dest.write_str("polygon(")?;
+        let mut prefix = false;
+        if !is_default(&self.fill) {
+            self.fill.to_css(dest)?;
+            prefix = true;
+        }
+        if let Some(ref round) = self.round {
+            if prefix {
+                dest.write_char(' ')?;
+            }
+            dest.write_str("round ")?;
+            round.to_css(dest)?;
+            prefix = true;
+        }
+        for (index, coordinate) in self.coordinates.iter().enumerate() {
+            if prefix || index != 0 {
+                dest.write_str(", ")?;
+            }
+            coordinate.to_css(dest)?;
+        }
+        dest.write_char(')')
+    }
 }
 
 pub use self::GenericPolygon as Polygon;
@@ -586,13 +613,14 @@ where
     L: Animate,
 {
     fn animate(&self, other: &Self, procedure: Procedure) -> Result<Self, ()> {
-        if self.fill != other.fill {
+        if self.fill != other.fill || self.round.is_some() || other.round.is_some() {
             return Err(());
         }
         let coordinates =
             lists::by_computed_value::animate(&self.coordinates, &other.coordinates, procedure)?;
         Ok(Polygon {
             fill: self.fill,
+            round: None,
             coordinates,
         })
     }

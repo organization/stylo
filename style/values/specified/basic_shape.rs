@@ -492,7 +492,18 @@ impl Polygon {
         input: &mut Parser,
         shape_type: ShapeType,
     ) -> Result<Self, ParseError> {
-        let fill = parse_fill_rule(input, shape_type, true /* has comma */);
+        let fill = input.try_parse(FillRule::parse).ok();
+        let round = input
+            .try_parse(|i| -> Result<_, ParseError> {
+                i.expect_ident_matching("round")?;
+                Ok(LengthPercentage::from(
+                    crate::values::specified::Length::parse_non_negative(context, i)?,
+                ))
+            })
+            .ok();
+        if fill.is_some() || round.is_some() {
+            input.expect_comma()?;
+        }
         let coordinates = input
             .parse_comma_separated(|i| {
                 Ok(PolygonCoord(
@@ -501,8 +512,19 @@ impl Polygon {
                 ))
             })?
             .into();
-
-        Ok(Polygon { fill, coordinates })
+        let fill = match shape_type {
+            ShapeType::Filled => fill.unwrap_or_default(),
+            ShapeType::Outline => Default::default(),
+        };
+        let round = match shape_type {
+            ShapeType::Outline => round.filter(|round| !crate::Zero::is_zero(round)),
+            ShapeType::Filled => round,
+        };
+        Ok(Polygon {
+            fill,
+            round,
+            coordinates,
+        })
     }
 }
 
