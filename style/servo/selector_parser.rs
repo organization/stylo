@@ -722,6 +722,7 @@ pub enum NonTSPseudoClass {
     FocusWithin,
     FocusVisible,
     Fullscreen,
+    HasSlotted,
     /// The `:heading` and `:heading()` pseudo-classes.
     Heading(HeadingSelectorData),
     Hover,
@@ -805,6 +806,7 @@ impl ToCss for NonTSPseudoClass {
             Self::FocusVisible => ":focus-visible",
             Self::FocusWithin => ":focus-within",
             Self::Fullscreen => ":fullscreen",
+            Self::HasSlotted => ":has-slotted",
             Self::Heading(ref levels) => {
                 dest.write_str(":heading")?;
                 if levels.0.is_empty() {
@@ -866,6 +868,7 @@ impl NonTSPseudoClass {
             Self::FocusVisible => ElementState::FOCUSRING,
             Self::FocusWithin => ElementState::FOCUS_WITHIN,
             Self::Fullscreen => ElementState::FULLSCREEN,
+            Self::HasSlotted => ElementState::HAS_SLOTTED,
             Self::Heading(_) => ElementState::HEADING_LEVEL_BITS,
             Self::Hover => ElementState::HOVER,
             Self::InRange => ElementState::INRANGE,
@@ -995,6 +998,7 @@ impl<'a, 'i> ::selectors::Parser<'i> for SelectorParser<'a> {
             "focus-visible" => NonTSPseudoClass::FocusVisible,
             "focus-within" => NonTSPseudoClass::FocusWithin,
             "fullscreen" => NonTSPseudoClass::Fullscreen,
+            "has-slotted" => NonTSPseudoClass::HasSlotted,
             "heading" => NonTSPseudoClass::Heading(HeadingSelectorData(Default::default())),
             "hover" => NonTSPseudoClass::Hover,
             "indeterminate" => NonTSPseudoClass::Indeterminate,
