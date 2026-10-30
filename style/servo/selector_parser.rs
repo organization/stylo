@@ -353,6 +353,7 @@ impl ::selectors::parser::PseudoElement for PseudoElement {
             || matches!(
                 self,
                 Self::FileSelectorButton
+                    | Self::ScrollButton(..)
                     | Self::Placeholder
                     | Self::ColorSwatch
                     | Self::SliderFill
