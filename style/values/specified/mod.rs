@@ -31,7 +31,8 @@ pub use self::animation::{
     AnimationComposition, AnimationDirection, AnimationDuration, AnimationFillMode,
     AnimationIterationCount, AnimationName, AnimationPlayState, AnimationRangeEnd,
     AnimationRangeStart, AnimationTimeline, ScrollAxis, TimelineName, TransitionBehavior,
-    TransitionProperty, ViewTimelineInset, ViewTransitionClass, ViewTransitionName,
+    TransitionProperty, ViewTimelineInset, ViewTransitionClass, ViewTransitionGroup,
+    ViewTransitionName,
 };
 pub use self::background::{
     BackgroundClip, BackgroundOrigin, BackgroundRepeat, BackgroundSize, ImageLayerAttachment,

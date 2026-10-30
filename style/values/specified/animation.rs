@@ -911,3 +911,36 @@ impl Parse for AnimationRangeEnd {
         parse_animation_range(context, input, LengthPercentage::hundred_percent()).map(Self)
     }
 }
+
+/// The `view-transition-group` property: `normal | contain | nearest | <custom-ident>`.
+/// <https://drafts.csswg.org/css-view-transitions-2/#view-transition-group-prop>
+#[derive(
+    Clone,
+    Debug,
+    Eq,
+    Hash,
+    MallocSizeOf,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToComputedValue,
+    ToCss,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+#[repr(transparent)]
+pub struct ViewTransitionGroup(pub CustomIdent);
+
+impl ViewTransitionGroup {
+    /// Returns `normal`.
+    pub fn normal() -> Self {
+        Self(CustomIdent(Atom::from("normal")))
+    }
+}
+
+impl Parse for ViewTransitionGroup {
+    fn parse<'i>(_: &ParserContext, input: &mut Parser<'i>) -> Result<Self, ParseError> {
+        let ident = input.expect_ident()?;
+        CustomIdent::from_ident(ident, &[]).map(Self)
+    }
+}

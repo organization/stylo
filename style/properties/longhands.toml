@@ -2540,6 +2540,16 @@ animation_type = "discrete"
 spec = "https://drafts.csswg.org/css-view-transitions-2/#view-transition-class-prop"
 affects = ""
 
+[view-transition-group]
+type = "ViewTransitionGroup"
+initial = "computed::ViewTransitionGroup::normal()"
+struct = "ui"
+engine = "servo"
+servo_pref = "layout.css.view-transitions.enabled"
+animation_type = "discrete"
+spec = "https://drafts.csswg.org/css-view-transitions-2/#view-transition-group-prop"
+affects = ""
+
 [view-transition-name]
 type = "ViewTransitionName"
 initial = "computed::ViewTransitionName::none()"
