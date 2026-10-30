@@ -278,8 +278,9 @@ pub enum GenericColorOrAuto<C> {
 
 pub use self::GenericColorOrAuto as ColorOrAuto;
 
-/// Caret color is effectively a ColorOrAuto, but resolves `auto` to
-/// currentColor.
+/// Caret color is one or two `auto | <color>` values, the second one for the
+/// caret's contrast outline; the first `auto` resolves to currentColor.
+/// <https://drafts.csswg.org/css-ui-4/#caret-color>
 #[derive(
     Animate,
     Clone,
@@ -292,19 +293,33 @@ pub use self::GenericColorOrAuto as ColorOrAuto;
     ToAnimatedValue,
     ToAnimatedZero,
     ToComputedValue,
-    ToCss,
     ToShmem,
-    ToTyped,
 )]
-#[repr(transparent)]
-pub struct GenericCaretColor<C>(pub GenericColorOrAuto<C>);
+#[repr(C)]
+pub struct GenericCaretColor<C>(pub GenericColorOrAuto<C>, pub GenericColorOrAuto<C>);
 
 impl<C> GenericCaretColor<C> {
     /// Returns the `auto` value.
     pub fn auto() -> Self {
-        GenericCaretColor(GenericColorOrAuto::Auto)
+        GenericCaretColor(GenericColorOrAuto::Auto, GenericColorOrAuto::Auto)
     }
 }
+
+impl<C: ToCss> ToCss for GenericCaretColor<C> {
+    fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
+    where
+        W: Write,
+    {
+        self.0.to_css(dest)?;
+        if let GenericColorOrAuto::Color(_) = self.1 {
+            dest.write_char(' ')?;
+            self.1.to_css(dest)?;
+        }
+        Ok(())
+    }
+}
+
+impl<C> crate::typed_om::ToTyped for GenericCaretColor<C> {}
 
 pub use self::GenericCaretColor as CaretColor;
 
