@@ -43,6 +43,8 @@ click
 close
 closing
 color
+color-gamut
+color-index
 command
 complete
 compositionend
@@ -55,11 +57,14 @@ dark
 datachannel
 date
 datetime-local
+device-aspect-ratio
 device-height
 device-pixel-ratio
 device-width
 dir
+display-mode
 durationchange
+dynamic-range
 email
 embed
 emptied
@@ -73,6 +78,7 @@ fetch
 file
 fill
 fill-opacity
+forced-colors
 foreignObject
 formdata
 frame
@@ -81,6 +87,7 @@ fullscreenchange
 fullscreenerror
 g
 gattserverdisconnected
+grid
 hairline
 hashchange
 height
@@ -96,6 +103,7 @@ inline-size
 input
 inputsourceschange
 invalid
+inverted-colors
 keydown
 keypress
 kind
@@ -112,6 +120,7 @@ message
 message
 messageerror
 meter
+monochrome
 monospace
 month
 mousedown
@@ -127,6 +136,8 @@ onchange
 open
 orientation
 outside
+overflow-block
+overflow-inline
 pagehide
 pageshow
 password
@@ -137,6 +148,9 @@ pointer
 popstate
 postershown
 prefers-color-scheme
+prefers-contrast
+prefers-reduced-motion
+prefers-reduced-transparency
 print
 progress
 radio
@@ -160,6 +174,7 @@ safe-area-inset-top
 sans-serif
 scan
 screen
+scripting
 scroll-position
 scrollbar-inline-size
 search
@@ -202,9 +217,11 @@ tspan
 uncapturederror
 unhandledrejection
 unload
+update
 url
 use
 video
+video-dynamic-range
 visibilitychange
 volumechange
 waiting
