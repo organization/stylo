@@ -15,7 +15,7 @@ use crate::values::generics::box_::{
     GenericLineClamp, GenericOverflowClipMargin, GenericPerspective, GenericScrollbarInset,
     MaxLines, OverflowClipMarginBox,
 };
-use crate::values::specified::length::{LengthPercentage, NonNegativeLength};
+use crate::values::specified::length::{Length, LengthPercentage, NonNegativeLength};
 use crate::values::specified::{AllowQuirks, NonNegativeNumberOrPercentage, PositiveInteger};
 use cssparser::Parser;
 use num_traits::FromPrimitive;
@@ -75,19 +75,17 @@ bitflags! {
 }
 
 /// The specified value of `overflow-clip-margin`.
-pub type OverflowClipMargin = GenericOverflowClipMargin<NonNegativeLength>;
+pub type OverflowClipMargin = GenericOverflowClipMargin<Length>;
 
 impl Parse for OverflowClipMargin {
-    // <visual-box> || <length [0,∞]>
+    // <visual-box> || <length>
     fn parse(context: &ParserContext, input: &mut Parser) -> Result<Self, ParseError> {
         use crate::Zero;
         let mut offset = None;
         let mut visual_box = None;
         loop {
             if offset.is_none() {
-                offset = input
-                    .try_parse(|i| NonNegativeLength::parse(context, i))
-                    .ok();
+                offset = input.try_parse(|i| Length::parse(context, i)).ok();
             }
             if visual_box.is_none() {
                 visual_box = input.try_parse(OverflowClipMarginBox::parse).ok();
@@ -101,7 +99,7 @@ impl Parse for OverflowClipMargin {
             return Err(ParseError::custom(StyleParseErrorKind::UnspecifiedError));
         }
         Ok(Self {
-            offset: offset.unwrap_or_else(NonNegativeLength::zero),
+            offset: offset.unwrap_or_else(Length::zero),
             visual_box: visual_box.unwrap_or(OverflowClipMarginBox::PaddingBox),
         })
     }
@@ -783,23 +781,18 @@ pub enum AlignmentBaseline {
     /// Use the text-under baseline.
     TextBottom,
     /// Use the alphabetic baseline.
-    #[cfg(feature = "gecko")]
     Alphabetic,
     /// Use the ideographic-under baseline.
-    #[cfg(feature = "gecko")]
     Ideographic,
     /// In general, use the x-middle baselines; except under text-orientation: upright
     /// (where the alphabetic and x-height baselines are essentially meaningless) use
     /// the central baseline instead.
     Middle,
     /// Use the central baseline.
-    #[cfg(feature = "gecko")]
     Central,
     /// Use the math baseline.
-    #[cfg(feature = "gecko")]
     Mathematical,
     /// Use the hanging baseline.
-    #[cfg(feature = "gecko")]
     Hanging,
     /// Use the text-over baseline.
     TextTop,

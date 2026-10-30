@@ -2754,6 +2754,24 @@ animation_type = "discrete"
 spec = "https://www.w3.org/TR/css-text-4/#hyphenate-character"
 affects = "layout"
 
+[orphans]
+type = "PositiveInteger"
+initial = "crate::values::generics::GreaterThanOrEqualToOne(2)"
+struct = "inherited_text"
+engine = "servo"
+animation_type = "discrete"
+spec = "https://drafts.csswg.org/css-break/#widows-orphans"
+affects = "layout"
+
+[widows]
+type = "PositiveInteger"
+initial = "crate::values::generics::GreaterThanOrEqualToOne(2)"
+struct = "inherited_text"
+engine = "servo"
+animation_type = "discrete"
+spec = "https://drafts.csswg.org/css-break/#widows-orphans"
+affects = "layout"
+
 [hyphenate-limit-chars]
 type = "HyphenateLimitChars"
 initial = "computed::HyphenateLimitChars::auto()"

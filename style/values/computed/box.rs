@@ -6,7 +6,7 @@
 
 use crate::derives::*;
 use crate::values::animated::ToAnimatedValue;
-use crate::values::computed::length::{LengthPercentage, NonNegativeLength};
+use crate::values::computed::length::{Length, LengthPercentage, NonNegativeLength};
 use crate::values::computed::{Context, Integer, Number, ToComputedValue};
 use crate::values::generics::GreaterThanOrEqualToOne;
 use crate::values::generics::box_::{
@@ -32,7 +32,7 @@ pub use crate::values::specified::box_::{
 pub type BaselineShift = GenericBaselineShift<LengthPercentage>;
 
 /// A computed value for the `overflow-clip-margin` property.
-pub type OverflowClipMargin = GenericOverflowClipMargin<NonNegativeLength>;
+pub type OverflowClipMargin = GenericOverflowClipMargin<Length>;
 
 /// A computed value for the `-moz-scrollbar-inset-block` / `-inline` properties.
 pub type ScrollbarInset = GenericScrollbarInset<NonNegativeLength>;
