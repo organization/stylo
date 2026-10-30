@@ -742,6 +742,7 @@ where
             | Component::ID(..)
             | Component::Part(..)
             | Component::Class(..)
+            | Component::ClassPrefix(..)
             | Component::AttributeInNoNamespaceExists { .. }
             | Component::AttributeInNoNamespace { .. }
             | Component::Root

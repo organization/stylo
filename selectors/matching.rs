@@ -1233,6 +1233,9 @@ where
         Component::Class(ref class) => {
             element.has_class(class, context.shared.classes_and_ids_case_sensitivity())
         },
+        Component::ClassPrefix(ref prefix) => {
+            element.has_class_prefix(prefix, context.shared.classes_and_ids_case_sensitivity())
+        },
         Component::LocalName(ref local_name) => matches_local_name(element, local_name),
         Component::AttributeInNoNamespaceExists {
             ref local_name,

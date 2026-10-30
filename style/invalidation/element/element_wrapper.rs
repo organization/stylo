@@ -414,6 +414,19 @@ where
         }
     }
 
+    fn has_class_prefix(&self, prefix: &AtomIdent, case_sensitivity: CaseSensitivity) -> bool {
+        match self.snapshot() {
+            Some(snapshot) if snapshot.has_attrs() => {
+                let mut found = false;
+                snapshot.each_class(|class| {
+                    found = found || case_sensitivity.class_has_prefix(class, prefix);
+                });
+                found
+            },
+            _ => self.element.has_class_prefix(prefix, case_sensitivity),
+        }
+    }
+
     fn has_custom_state(&self, state: &AtomIdent) -> bool {
         match self.snapshot() {
             Some(snapshot) if snapshot.has_custom_states() => snapshot.has_custom_state(state),

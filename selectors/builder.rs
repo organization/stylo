@@ -341,6 +341,7 @@ where
                 specificity.id_selectors += 1;
             },
             Component::Class(..)
+            | Component::ClassPrefix(..)
             | Component::AttributeInNoNamespace { .. }
             | Component::AttributeInNoNamespaceExists { .. }
             | Component::AttributeOther(..)

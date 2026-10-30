@@ -12,6 +12,7 @@
 "layout.css.basic-shape-shape.enabled" = false
 "layout.css.break.enabled" = false
 "layout.css.calc-typed-arithmetic.enabled" = true
+"layout.css.class-prefix-selector.enabled" = false
 "layout.css.color-mix-multi-color.enabled" = true
 "layout.css.columns.enabled" = false
 "layout.css.contain.enabled" = false

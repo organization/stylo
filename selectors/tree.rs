@@ -150,6 +150,17 @@ pub trait Element: Sized + Copy + Clone + Debug {
         case_sensitivity: CaseSensitivity,
     ) -> bool;
 
+    /// Whether any class matches the class prefix selector with `prefix`, see
+    /// `CaseSensitivity::class_has_prefix`. Only needed when the parser accepts class prefix
+    /// selectors.
+    fn has_class_prefix(
+        &self,
+        _prefix: &<Self::Impl as SelectorImpl>::Identifier,
+        _case_sensitivity: CaseSensitivity,
+    ) -> bool {
+        false
+    }
+
     fn has_custom_state(&self, name: &<Self::Impl as SelectorImpl>::Identifier) -> bool;
 
     /// Returns the mapping from the `exportparts` attribute in the reverse

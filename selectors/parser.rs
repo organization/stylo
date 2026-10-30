@@ -299,6 +299,11 @@ pub trait Parser<'i> {
         false
     }
 
+    /// Whether to parse class prefix selectors such as `.foo-*`.
+    fn parse_class_prefix(&self) -> bool {
+        false
+    }
+
     /// Whether to parse the '&' delimiter as a parent selector.
     fn parse_parent_selector(&self) -> bool {
         false
@@ -1255,6 +1260,7 @@ impl<Impl: SelectorImpl> Selector<Impl> {
                 LocalName(..)
                 | ID(..)
                 | Class(..)
+                | ClassPrefix(..)
                 | AttributeInNoNamespaceExists { .. }
                 | AttributeInNoNamespace { .. }
                 | AttributeOther(..)
@@ -2075,6 +2081,10 @@ pub enum Component<Impl: SelectorImpl> {
 
     ID(#[cfg_attr(feature = "to_shmem", shmem(field_bound))] Impl::Identifier),
     Class(#[cfg_attr(feature = "to_shmem", shmem(field_bound))] Impl::Identifier),
+    /// A class prefix selector such as `.foo-*`, holding the prefix (`foo-`).
+    ///
+    /// https://drafts.csswg.org/selectors-5/#class-prefix
+    ClassPrefix(#[cfg_attr(feature = "to_shmem", shmem(field_bound))] Impl::Identifier),
 
     AttributeInNoNamespaceExists {
         #[cfg_attr(feature = "to_shmem", shmem(field_bound))]
@@ -2256,6 +2266,16 @@ impl<Impl: SelectorImpl> Component<Impl> {
                     &NamespaceConstraint::Specific(&namespace_empty_string::<Impl>()),
                     local_name,
                     local_name,
+                ) {
+                    return false;
+                }
+            },
+            ClassPrefix(..) => {
+                let class = Impl::LocalName::from("class");
+                if !visitor.visit_attribute_selector(
+                    &NamespaceConstraint::Specific(&namespace_empty_string::<Impl>()),
+                    &class,
+                    &class,
                 ) {
                     return false;
                 }
@@ -2611,6 +2631,11 @@ impl<Impl: SelectorImpl> ToCss for Component<Impl> {
             Class(ref s) => {
                 dest.write_char('.')?;
                 s.to_css(dest)
+            },
+            ClassPrefix(ref s) => {
+                dest.write_char('.')?;
+                s.to_css(dest)?;
+                dest.write_char('*')
             },
             LocalName(ref s) => s.to_css(dest),
             ExplicitUniversalType => dest.write_char('*'),
@@ -3622,13 +3647,25 @@ where
                 Component::ParentSelector
             } else {
                 let class = match *input.next_including_whitespace()? {
-                    Token::Ident(ref class) => class,
+                    Token::Ident(ref class) => class.clone(),
                     _ => {
                         let e = SelectorParseErrorKind::ClassNeedsIdent;
                         return Err(ParseError::custom(e));
                     },
                 };
-                Component::Class(class.as_ref().into())
+                if class.ends_with('-')
+                    && parser.parse_class_prefix()
+                    && input
+                        .try_parse(|input| match input.next_including_whitespace() {
+                            Ok(&Token::Delim('*')) => Ok(()),
+                            _ => Err(()),
+                        })
+                        .is_ok()
+                {
+                    Component::ClassPrefix(class.as_ref().into())
+                } else {
+                    Component::Class(class.as_ref().into())
+                }
             })
         },
         Token::SquareBracketBlock => {

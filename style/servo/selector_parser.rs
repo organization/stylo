@@ -962,6 +962,11 @@ impl<'a, 'i> ::selectors::Parser<'i> for SelectorParser<'a> {
     }
 
     #[inline]
+    fn parse_class_prefix(&self) -> bool {
+        crate::pref!("layout.css.class-prefix-selector.enabled")
+    }
+
+    #[inline]
     fn parse_parent_selector(&self) -> bool {
         true
     }
