@@ -34,6 +34,10 @@ pub use crate::values::specified::text::{
     UnicodeBidi, WhiteSpaceCollapse, WordBreak, WordSpaceTransform, WordSpaceTransformKeyword,
 };
 
+/// A computed value for the `text-fit` property.
+pub type TextFit =
+    crate::values::specified::text::GenericTextFit<crate::values::computed::NonNegativePercentage>;
+
 /// A computed value for the `text-size-adjust` property.
 pub type TextSizeAdjustAmount = crate::values::specified::text::GenericTextSizeAdjustAmount<
     crate::values::computed::NonNegativePercentage,

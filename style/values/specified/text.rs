@@ -2253,3 +2253,147 @@ impl ToCss for WordSpaceTransform {
 }
 
 impl crate::typed_om::ToTyped for WordSpaceTransform {}
+
+/// Whether `text-fit` grows or shrinks the text.
+#[allow(missing_docs)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    MallocSizeOf,
+    Parse,
+    PartialEq,
+    Serialize,
+    SpecifiedValueInfo,
+    ToComputedValue,
+    ToCss,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+#[repr(u8)]
+pub enum TextFitKind {
+    None,
+    Grow,
+    Shrink,
+}
+
+/// Which lines `text-fit` adjusts.
+#[allow(missing_docs)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    MallocSizeOf,
+    Parse,
+    PartialEq,
+    Serialize,
+    SpecifiedValueInfo,
+    ToComputedValue,
+    ToCss,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+#[repr(u8)]
+pub enum TextFitMethod {
+    Consistent,
+    PerLine,
+    PerLineAll,
+}
+
+/// The `text-fit` property:
+/// `none | [ grow | shrink ] [ consistent | per-line | per-line-all ]? <percentage>?`.
+/// <https://drafts.csswg.org/css-fonts-5/#text-fit>
+#[derive(Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToResolvedValue, ToShmem)]
+#[repr(C)]
+pub struct GenericTextFit<Percentage> {
+    /// Grow, shrink or none.
+    pub kind: TextFitKind,
+    /// The method, if one was given.
+    pub method: Option<TextFitMethod>,
+    /// The limit, if one was given.
+    pub limit: Option<Percentage>,
+}
+
+impl<P> GenericTextFit<P> {
+    /// Returns `none`.
+    pub fn none() -> Self {
+        Self {
+            kind: TextFitKind::None,
+            method: None,
+            limit: None,
+        }
+    }
+}
+
+impl<P: ToCss> ToCss for GenericTextFit<P> {
+    fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
+    where
+        W: Write,
+    {
+        self.kind.to_css(dest)?;
+        if let Some(method) = self.method {
+            dest.write_char(' ')?;
+            method.to_css(dest)?;
+        }
+        if let Some(ref limit) = self.limit {
+            dest.write_char(' ')?;
+            limit.to_css(dest)?;
+        }
+        Ok(())
+    }
+}
+
+impl<P> crate::typed_om::ToTyped for GenericTextFit<P> {}
+
+/// A specified value for the `text-fit` property.
+pub type TextFit = GenericTextFit<crate::values::specified::NonNegativePercentage>;
+
+impl Parse for TextFit {
+    fn parse<'i>(context: &ParserContext, input: &mut Parser<'i>) -> Result<Self, ParseError> {
+        let kind = TextFitKind::parse(input)?;
+        if kind == TextFitKind::None {
+            return Ok(Self::none());
+        }
+        let method = input.try_parse(|i| TextFitMethod::parse(i)).ok();
+        let limit = input
+            .try_parse(|i| crate::values::specified::NonNegativePercentage::parse(context, i))
+            .ok();
+        Ok(Self {
+            kind,
+            method,
+            limit,
+        })
+    }
+}
+
+impl ToComputedValue for TextFit {
+    type ComputedValue = GenericTextFit<crate::values::computed::NonNegativePercentage>;
+
+    fn to_computed_value(&self, context: &Context) -> Self::ComputedValue {
+        GenericTextFit {
+            kind: self.kind,
+            method: self
+                .method
+                .filter(|method| *method != TextFitMethod::Consistent),
+            limit: self
+                .limit
+                .as_ref()
+                .map(|limit| limit.to_computed_value(context)),
+        }
+    }
+
+    fn from_computed_value(computed: &Self::ComputedValue) -> Self {
+        Self {
+            kind: computed.kind,
+            method: computed.method,
+            limit: computed
+                .limit
+                .as_ref()
+                .map(ToComputedValue::from_computed_value),
+        }
+    }
+}

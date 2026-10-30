@@ -2827,6 +2827,15 @@ animation_type = "discrete"
 spec = "https://drafts.csswg.org/css-overflow-5/#scroll-marker-group-property"
 affects = "layout"
 
+[text-fit]
+type = "TextFit"
+initial = "computed::TextFit::none()"
+struct = "text"
+engine = "servo"
+animation_type = "discrete"
+spec = "https://drafts.csswg.org/css-fonts-5/#text-fit"
+affects = "layout"
+
 [text-group-align]
 type = "TextGroupAlign"
 initial = "computed::TextGroupAlign::None"

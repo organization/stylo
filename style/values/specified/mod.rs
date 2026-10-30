@@ -129,7 +129,7 @@ pub use self::text::{OverflowWrap, TextEmphasisPosition, TextEmphasisStyle, Word
 pub use self::text::{TextAlignKeyword, TextDecorationLine, TextOverflow, WordSpacing};
 pub use self::text::{
     HangingPunctuation, TextAlignAll, TextAlignLast, TextAutospace, TextDecorationSkipSpaces,
-    TextGroupAlign, TextSizeAdjustAmount, TextSpacingTrim, TextUnderlinePosition,
+    TextFit, TextGroupAlign, TextSizeAdjustAmount, TextSpacingTrim, TextUnderlinePosition,
     WordSpaceTransform,
 };
 pub use self::text::{TextBoxEdge, TextBoxTrim};
