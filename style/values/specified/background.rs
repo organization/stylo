@@ -227,11 +227,11 @@ impl BackgroundClip {
             Self::BorderBox => ClipValidity::BOTH,
             Self::PaddingBox => ClipValidity::BOTH,
             Self::ContentBox => ClipValidity::BOTH,
-                    Self::FillBox => ClipValidity::MASK,
-                    Self::StrokeBox => ClipValidity::MASK,
-                    Self::ViewBox => ClipValidity::MASK,
-                    Self::NoClip => ClipValidity::MASK,
-                    Self::Text => ClipValidity::BACKGROUND,
+            Self::FillBox => ClipValidity::MASK,
+            Self::StrokeBox => ClipValidity::MASK,
+            Self::ViewBox => ClipValidity::MASK,
+            Self::NoClip => ClipValidity::MASK,
+            Self::Text => ClipValidity::BACKGROUND,
             Self::BorderArea => ClipValidity::BACKGROUND,
         }
     }
@@ -303,7 +303,7 @@ impl BackgroundOrigin {
         input: &mut Parser,
     ) -> Result<Self, ParseError> {
         let origin = Self::parse(input)?;
-            if matches!(origin, Self::FillBox | Self::StrokeBox | Self::ViewBox) {
+        if matches!(origin, Self::FillBox | Self::StrokeBox | Self::ViewBox) {
             return Err(ParseError::custom(StyleParseErrorKind::UnspecifiedError));
         }
         Ok(origin)
@@ -316,9 +316,9 @@ impl From<BackgroundOrigin> for BackgroundClip {
             BackgroundOrigin::BorderBox => Self::BorderBox,
             BackgroundOrigin::PaddingBox => Self::PaddingBox,
             BackgroundOrigin::ContentBox => Self::ContentBox,
-                    BackgroundOrigin::FillBox => Self::FillBox,
-                    BackgroundOrigin::StrokeBox => Self::StrokeBox,
-                    BackgroundOrigin::ViewBox => Self::ViewBox,
+            BackgroundOrigin::FillBox => Self::FillBox,
+            BackgroundOrigin::StrokeBox => Self::StrokeBox,
+            BackgroundOrigin::ViewBox => Self::ViewBox,
         }
     }
 }

@@ -297,8 +297,10 @@ impl ToCss for PseudoElement {
 
 impl ::selectors::parser::PseudoElement for PseudoElement {
     fn parses_as_element_backed(&self) -> bool {
-        matches!(self, Self::DetailsContent | Self::Picker | Self::ScrollButton(..)) ||
-            self.has_argument()
+        matches!(
+            self,
+            Self::DetailsContent | Self::Picker | Self::ScrollButton(..)
+        ) || self.has_argument()
     }
 
     fn valid_after_slotted(&self) -> bool {
@@ -347,8 +349,8 @@ impl ::selectors::parser::PseudoElement for PseudoElement {
 
     fn accepts_state_pseudo_classes(&self) -> bool {
         // `:only-child` is allowed after a descendant of a pseudo-element root.
-        self.is_in_pseudo_element_tree() ||
-            matches!(
+        self.is_in_pseudo_element_tree()
+            || matches!(
                 self,
                 Self::FileSelectorButton
                     | Self::Placeholder

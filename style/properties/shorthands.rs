@@ -755,7 +755,9 @@ pub mod text_spacing {
         for index in 0..2 {
             if (index == 0) == trim_first {
                 if trim.is_none() {
-                    trim = input.try_parse(|i| text_spacing_trim::parse(context, i)).ok();
+                    trim = input
+                        .try_parse(|i| text_spacing_trim::parse(context, i))
+                        .ok();
                 }
             } else if autospace.is_none() {
                 autospace = input.try_parse(|i| text_autospace::parse(context, i)).ok();

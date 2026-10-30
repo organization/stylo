@@ -307,7 +307,15 @@ impl SpecifiedValueInfo for ContentDistribution {
         list_baseline_keywords(f); // block-axis only
         list_content_distribution_keywords(f);
         list_overflow_position_keywords(f);
-        f(&["start", "end", "flex-start", "flex-end", "flow-start", "flow-end", "center"]);
+        f(&[
+            "start",
+            "end",
+            "flex-start",
+            "flex-end",
+            "flow-start",
+            "flow-end",
+            "center",
+        ]);
         f(&["left", "right"]); // inline-axis only
     }
 }
