@@ -29,6 +29,40 @@ pub enum GenericColor<Percentage> {
     ColorMix(Box<GenericColorMix<Self, Percentage>>),
     /// The contrast-color() function.
     ContrastColor(Box<Self>),
+    /// The color-layers() function.
+    ColorLayers(Box<GenericColorLayers<Self>>),
+}
+
+/// The color-layers() function: a blend mode and the layers, the first one at
+/// the bottom.
+/// <https://drafts.csswg.org/css-color-6/#color-layers>
+#[derive(Clone, Debug, MallocSizeOf, PartialEq, ToAnimatedValue, ToShmem)]
+#[repr(C)]
+pub struct GenericColorLayers<Color> {
+    /// The blend mode used to composite the layers.
+    pub blend: crate::values::specified::Blend,
+    /// The layers.
+    pub layers: OwnedSlice<Color>,
+}
+
+impl<Color: ToCss> ToCss for GenericColorLayers<Color> {
+    fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
+    where
+        W: Write,
+    {
+        dest.write_str("color-layers(")?;
+        if self.blend != crate::values::specified::Blend::Normal {
+            self.blend.to_css(dest)?;
+            dest.write_str(", ")?;
+        }
+        for (index, layer) in self.layers.iter().enumerate() {
+            if index != 0 {
+                dest.write_str(", ")?;
+            }
+            layer.to_css(dest)?;
+        }
+        dest.write_char(')')
+    }
 }
 
 /// Flags used to modify the calculation of a color mix result.
@@ -41,6 +75,8 @@ bitflags! {
         const NORMALIZE_WEIGHTS = 1 << 0;
         /// The result should always be converted to the modern color syntax.
         const RESULT_IN_MODERN_SYNTAX = 1 << 1;
+        /// The mix is a palette-mix() of font palettes.
+        const PALETTE = 1 << 2;
     }
 }
 
@@ -92,7 +128,11 @@ impl<Color: ToCss, Percentage: ToCss + ToPercentage> ToCss for ColorMix<Color, P
     where
         W: Write,
     {
-        dest.write_str("color-mix(")?;
+        dest.write_str(if self.flags.contains(ColorMixFlags::PALETTE) {
+            "palette-mix("
+        } else {
+            "color-mix("
+        })?;
 
         // If the color interpolation method is oklab (which is now the default),
         // it can be omitted.

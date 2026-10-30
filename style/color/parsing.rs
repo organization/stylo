@@ -201,6 +201,7 @@ pub fn parse_color_with(
             return input.parse_nested_block(|arguments| {
                 let color_function = parse_color_function(context, name, arguments)?;
                 if !color_function.has_origin_color()
+                    && !color_function.has_calc_component()
                     && let Ok(ComputedColor::Absolute(resolved)) =
                         color_function.to_computed_color(None)
                 {

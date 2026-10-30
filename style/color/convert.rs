@@ -18,9 +18,12 @@ use crate::values::normalize;
 type Transform = euclid::default::Transform3D<f32>;
 type Vector = euclid::default::Vector3D<f32>;
 
-/// Normalize hue into [0, 360).
+/// Normalize hue into [0, 360). A hue that is not finite becomes 0.
 #[inline]
 pub fn normalize_hue(hue: f32) -> f32 {
+    if !hue.is_finite() {
+        return 0.0;
+    }
     hue - 360. * (hue / 360.).floor()
 }
 
@@ -103,6 +106,15 @@ pub fn rgb_to_hsl(from: &ColorComponents) -> ColorComponents {
         }
     } else {
         0.0
+    };
+
+    // Very out of gamut colors can produce a negative saturation; rotate the
+    // hue by 180 degrees and use a positive saturation instead.
+    // <https://github.com/w3c/csswg-drafts/issues/9222>
+    let (hue, saturation) = if saturation < 0.0 {
+        (normalize_hue(hue + 180.0), -saturation)
+    } else {
+        (hue, saturation)
     };
 
     ColorComponents(hue, saturation * 100.0, lightness * 100.0)
@@ -630,11 +642,6 @@ impl ColorSpaceConversion for ProphotoRgb {
 pub struct Rec2020;
 
 impl Rec2020 {
-    #[allow(clippy::excessive_precision)]
-    const ALPHA: f32 = 1.09929682680944;
-    #[allow(clippy::excessive_precision)]
-    const BETA: f32 = 0.018053968510807;
-
     #[rustfmt::skip]
     #[allow(clippy::excessive_precision)]
     const TO_XYZ: Transform = Transform::new(
@@ -657,16 +664,9 @@ impl Rec2020 {
 impl ColorSpaceConversion for Rec2020 {
     const WHITE_POINT: WhitePoint = WhitePoint::D65;
 
+    /// The transfer function is the ITU-R BT.1886 display EOTF, a pure 2.4 gamma.
     fn to_linear_light(from: &ColorComponents) -> ColorComponents {
-        (*from).map(|value| {
-            let abs = value.abs();
-
-            if abs < Self::BETA * 4.5 {
-                value / 4.5
-            } else {
-                value.signum() * ((abs + Self::ALPHA - 1.0) / Self::ALPHA).powf(1.0 / 0.45)
-            }
-        })
+        (*from).map(|value| value.signum() * value.abs().powf(2.4))
     }
 
     fn to_xyz(from: &ColorComponents) -> ColorComponents {
@@ -678,15 +678,7 @@ impl ColorSpaceConversion for Rec2020 {
     }
 
     fn to_gamma_encoded(from: &ColorComponents) -> ColorComponents {
-        (*from).map(|v| {
-            let abs = v.abs();
-
-            if abs > Self::BETA {
-                v.signum() * (Self::ALPHA * abs.powf(0.45) - (Self::ALPHA - 1.0))
-            } else {
-                4.5 * v
-            }
-        })
+        (*from).map(|value| value.signum() * value.abs().powf(1.0 / 2.4))
     }
 }
 

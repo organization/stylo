@@ -41,6 +41,7 @@ impl ToCss for Color {
                 c.to_css(dest)?;
                 dest.write_char(')')
             },
+            Self::ColorLayers(ref layers) => layers.to_css(dest),
         }
     }
 }
@@ -107,6 +108,13 @@ impl Color {
                 let bg_color = c.resolve_to_absolute(current_color);
                 Self::resolve_contrast_color(&bg_color)
             },
+            Self::ColorLayers(ref layers) => crate::color::layers::composite(
+                layers.blend,
+                layers
+                    .layers
+                    .iter()
+                    .map(|layer| layer.resolve_to_absolute(current_color)),
+            ),
         }
     }
 

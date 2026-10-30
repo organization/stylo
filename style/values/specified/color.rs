@@ -16,11 +16,11 @@ use crate::values::computed::{
 };
 use crate::values::generics::Optional;
 use crate::values::generics::color::{
-    ColorMixFlags, GenericCaretColor, GenericColorMix, GenericColorMixItem, GenericColorOrAuto,
-    GenericLightDark,
+    ColorMixFlags, GenericCaretColor, GenericColorLayers, GenericColorMix, GenericColorMixItem,
+    GenericColorOrAuto, GenericLightDark,
 };
-use crate::values::specified::Percentage;
 use crate::values::specified::percentage::ToPercentage;
+use crate::values::specified::{Blend, Percentage};
 use crate::values::{CustomIdent, normalize};
 use cssparser::{Parser, Token, match_ignore_ascii_case};
 use std::fmt::{self, Write};
@@ -40,7 +40,28 @@ impl ColorMix {
         input: &mut Parser,
         preserve_authored: PreserveAuthored,
     ) -> Result<Self, ParseError> {
-        input.expect_function_matching("color-mix")?;
+        parse_mix(
+            context,
+            input,
+            "color-mix",
+            ColorMixFlags::NORMALIZE_WEIGHTS | ColorMixFlags::RESULT_IN_MODERN_SYNTAX,
+            |context, input| Color::parse_internal(context, input, preserve_authored),
+        )
+    }
+}
+
+/// Parses a color-mix()-like function: an optional interpolation method and a
+/// list of items with optional percentages, normalized as in
+/// <https://drafts.csswg.org/css-values-5/#normalize-mix-percentages>.
+pub(crate) fn parse_mix<Item: Clone>(
+    context: &ParserContext,
+    input: &mut Parser,
+    name: &str,
+    flags: ColorMixFlags,
+    parse_item: impl Fn(&ParserContext, &mut Parser) -> Result<Item, ParseError>,
+) -> Result<GenericColorMix<Item, Percentage>, ParseError> {
+    {
+        input.expect_function_matching(name)?;
 
         input.parse_nested_block(|input| {
             // If the color interpolation method is omitted, default to "in oklab".
@@ -61,12 +82,12 @@ impl ColorMix {
 
             let allow_multiple_items = crate::pref!("layout.css.color-mix-multi-color.enabled");
 
-            let mut items = ColorMixItemList::default();
+            let mut items = ColorMixItemList::<(Item, Option<Percentage>)>::default();
 
             loop {
                 let mut percentage = try_parse_percentage(input);
 
-                let color = Color::parse_internal(context, input, preserve_authored)?;
+                let color = parse_item(context, input)?;
 
                 if percentage.is_none() {
                     percentage = try_parse_percentage(input);
@@ -141,15 +162,14 @@ impl ColorMix {
                     color,
                     percentage: percentage.into(),
                 })
-                .collect::<ColorMixItemList<_>>();
+                .collect::<ColorMixItemList<GenericColorMixItem<Item, Percentage>>>();
 
-            // Pass RESULT_IN_MODERN_SYNTAX here, because the result of the color-mix() function
-            // should always be in the modern color syntax to allow for out of gamut results and
-            // to preserve floating point precision.
-            Ok(ColorMix {
+            // The result of color-mix() is always in the modern color syntax to allow for
+            // out of gamut results and to preserve floating point precision.
+            Ok(GenericColorMix {
                 interpolation,
                 items: OwnedSlice::from_slice(&finalized),
-                flags: ColorMixFlags::NORMALIZE_WEIGHTS | ColorMixFlags::RESULT_IN_MODERN_SYNTAX,
+                flags,
             })
         })
     }
@@ -195,6 +215,8 @@ pub enum Color {
     LightDark(Box<GenericLightDark<Self>>),
     /// The contrast-color function.
     ContrastColor(Box<Color>),
+    /// The color-layers() function.
+    ColorLayers(Box<GenericColorLayers<Color>>),
     /// Quirksmode-only rule for inheriting color from the body
     InheritFromBodyQuirk,
 }
@@ -588,6 +610,33 @@ impl Color {
                     return Ok(Color::ColorMix(Box::new(mix)));
                 }
 
+                if let Ok(layers) = input.try_parse(|i| {
+                    i.expect_function_matching("color-layers")?;
+                    i.parse_nested_block(|i| {
+                        let blend = i
+                            .try_parse(|i| {
+                                let blend = Blend::parse(i)?;
+                                if blend == Blend::PlusLighter {
+                                    return Err(ParseError::custom(
+                                        StyleParseErrorKind::UnspecifiedError,
+                                    ));
+                                }
+                                i.expect_comma()?;
+                                Ok(blend)
+                            })
+                            .unwrap_or(Blend::Normal);
+                        let layers = i.parse_comma_separated(|i| {
+                            Self::parse_internal(context, i, preserve_authored)
+                        })?;
+                        Ok(GenericColorLayers {
+                            blend,
+                            layers: layers.into(),
+                        })
+                    })
+                }) {
+                    return Ok(Color::ColorLayers(Box::new(layers)));
+                }
+
                 if let Ok(ld) = input.try_parse(|i| {
                     GenericLightDark::parse_with(i, |i| {
                         Self::parse_internal(context, i, preserve_authored)
@@ -656,6 +705,7 @@ impl ToCss for Color {
                 c.to_css(dest)?;
                 dest.write_char(')')
             },
+            Color::ColorLayers(ref layers) => layers.to_css(dest),
             Color::System(system) => system.to_css(dest),
             Color::InheritFromBodyQuirk => dest.write_str("-moz-inherit-from-body-quirk"),
         }
@@ -712,6 +762,10 @@ impl Color {
             Self::ContrastColor(ref c) => {
                 c.honored_in_forced_colors_mode(context, allow_transparent)
             },
+            Self::ColorLayers(ref layers) => layers
+                .layers
+                .iter()
+                .all(|layer| layer.honored_in_forced_colors_mode(context, allow_transparent)),
         }
     }
 
@@ -859,7 +913,11 @@ impl Color {
                 ComputedColor::Absolute(color)
             },
             Color::ColorFunction(ref color_function) => {
-                color_function.to_computed_color(context)?
+                let mut computed = color_function.to_computed_color(context)?;
+                if let ComputedColor::Absolute(ref mut color) = computed {
+                    adjust_absolute_color!(color);
+                }
+                computed
             },
             Color::LightDark(ref ld) => ld.compute(context.ok_or(())?),
             Color::ColorMix(ref mix) => {
@@ -889,6 +947,26 @@ impl Color {
                     ComputedColor::Absolute(ComputedColor::resolve_contrast_color(abs))
                 } else {
                     ComputedColor::ContrastColor(Box::new(computed))
+                }
+            },
+            Color::ColorLayers(ref layers) => {
+                let computed = layers
+                    .layers
+                    .iter()
+                    .map(|layer| layer.to_computed_color(context))
+                    .collect::<Result<Vec<_>, _>>()?;
+                if computed.iter().all(|layer| layer.as_absolute().is_some()) {
+                    ComputedColor::Absolute(crate::color::layers::composite(
+                        layers.blend,
+                        computed
+                            .iter()
+                            .filter_map(|layer| layer.as_absolute().copied()),
+                    ))
+                } else {
+                    ComputedColor::ColorLayers(Box::new(GenericColorLayers {
+                        blend: layers.blend,
+                        layers: computed.into(),
+                    }))
                 }
             },
             Color::System(system) => system.compute(context.ok_or(())?),
@@ -927,6 +1005,16 @@ impl ToComputedValue for Color {
             },
             ComputedColor::ContrastColor(ref c) => {
                 Self::ContrastColor(Box::new(ToComputedValue::from_computed_value(&**c)))
+            },
+            ComputedColor::ColorLayers(ref layers) => {
+                Self::ColorLayers(Box::new(GenericColorLayers {
+                    blend: layers.blend,
+                    layers: layers
+                        .layers
+                        .iter()
+                        .map(ToComputedValue::from_computed_value)
+                        .collect(),
+                }))
             },
         }
     }

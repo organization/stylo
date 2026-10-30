@@ -174,6 +174,13 @@ pub fn mix_many(
     // - modern syntax when requested (converting legacy spaces like hsl/hwb to srgb), otherwise;
     // - legacy srgb when every mixed color used legacy syntax.
     let finalize = |result: AbsoluteColor| -> AbsoluteColor {
+        // hsl() and hwb() results with missing components keep their own syntax,
+        // which is the only one that can represent `none`.
+        if matches!(result.color_space, ColorSpace::Hsl | ColorSpace::Hwb)
+            && result.flags.intersects(ColorFlags::NONE_FLAGS)
+        {
+            return result;
+        }
         if flags.contains(ColorMixFlags::RESULT_IN_MODERN_SYNTAX) {
             if result.is_legacy_syntax() {
                 // If the result *MUST* be in modern syntax, then make sure it is in a color space
@@ -203,9 +210,11 @@ pub fn mix_many(
         // https://drafts.csswg.org/css-color-5/#color-mix-percent-norm
         let sum: f32 = items.iter().map(|item| item.weight).sum();
         if sum == 0.0 {
-            return finalize(AbsoluteColor::TRANSPARENT_BLACK.to_color_space(interpolation.space));
-        }
-        if (sum - 1.0).abs() > f32::EPSILON {
+            // When every weight is zero, the colors are mixed equally and the
+            // result is fully transparent.
+            weight_scale = 0.0;
+            alpha_multiplier = 0.0;
+        } else if (sum - 1.0).abs() > f32::EPSILON {
             weight_scale = 1.0 / sum;
             if sum < 1.0 {
                 alpha_multiplier = sum;
@@ -215,11 +224,18 @@ pub fn mix_many(
 
     // We can unwrap here, because we already checked for no items.
     let (first, rest) = items.split_first().unwrap();
+    let weight_of = |item: &ColorMixItem| {
+        if normalize && weight_scale == 0.0 {
+            1.0
+        } else {
+            item.weight * weight_scale
+        }
+    };
     let mut accumulated_color = convert_for_mix(&first.color, interpolation.space);
-    let mut accumulated_weight = first.weight * weight_scale;
+    let mut accumulated_weight = weight_of(first);
 
     for item in rest {
-        let weight = item.weight * weight_scale;
+        let weight = weight_of(item);
         let combined = accumulated_weight + weight;
         if combined == 0.0 {
             // If both are 0, this fold doesn't contribute anything to the result.
@@ -227,7 +243,9 @@ pub fn mix_many(
         }
         let right = convert_for_mix(&item.color, interpolation.space);
 
-        let (left_weight, right_weight) = if normalize {
+        let (left_weight, right_weight) = if normalize && weight_scale == 0.0 {
+            (0.5, 0.5)
+        } else if normalize {
             (accumulated_weight / combined, weight / combined)
         } else {
             (accumulated_weight, weight)
@@ -297,76 +315,6 @@ impl ComponentMixOutcome {
     }
 }
 
-impl AbsoluteColor {
-    /// Calculate the flags that should be carried forward a color before converting
-    /// it to the interpolation color space according to:
-    /// <https://drafts.csswg.org/css-color-4/#interpolation-missing>
-    fn carry_forward_analogous_missing_components(&mut self, source: &AbsoluteColor) {
-        use ColorFlags as F;
-        use ColorSpace as S;
-
-        if source.color_space == self.color_space {
-            return;
-        }
-
-        // Reds             r, x
-        // Greens           g, y
-        // Blues            b, z
-        if source.color_space.is_rgb_or_xyz_like() && self.color_space.is_rgb_or_xyz_like() {
-            return;
-        }
-
-        // Lightness        L
-        if matches!(source.color_space, S::Lab | S::Lch | S::Oklab | S::Oklch) {
-            if matches!(self.color_space, S::Lab | S::Lch | S::Oklab | S::Oklch) {
-                self.flags |= source.flags & F::C0_IS_NONE;
-            } else if matches!(self.color_space, S::Hsl) && source.flags.contains(F::C0_IS_NONE) {
-                self.flags.insert(F::C2_IS_NONE)
-            }
-        } else if matches!(source.color_space, S::Hsl)
-            && matches!(self.color_space, S::Lab | S::Lch | S::Oklab | S::Oklch)
-            && source.flags.contains(F::C2_IS_NONE)
-        {
-            self.flags.insert(F::C0_IS_NONE)
-        }
-
-        // Colorfulness     C, S
-        if matches!(source.color_space, S::Hsl | S::Lch | S::Oklch)
-            && matches!(self.color_space, S::Hsl | S::Lch | S::Oklch)
-        {
-            self.flags |= source.flags & F::C1_IS_NONE;
-        }
-
-        // Hue              H
-        if matches!(source.color_space, S::Hsl | S::Hwb) {
-            if matches!(self.color_space, S::Hsl | S::Hwb) {
-                self.flags |= source.flags & F::C0_IS_NONE;
-            } else if matches!(self.color_space, S::Lch | S::Oklch)
-                && source.flags.contains(F::C0_IS_NONE)
-            {
-                self.flags.insert(F::C2_IS_NONE)
-            }
-        } else if matches!(source.color_space, S::Lch | S::Oklch) {
-            if matches!(self.color_space, S::Hsl | S::Hwb) {
-                if source.flags.contains(F::C2_IS_NONE) {
-                    self.flags.insert(F::C0_IS_NONE)
-                }
-            } else if matches!(self.color_space, S::Lch | S::Oklch) {
-                self.flags |= source.flags & F::C2_IS_NONE;
-            }
-        }
-
-        // Opponent         a, a
-        // Opponent         b, b
-        if matches!(source.color_space, S::Lab | S::Oklab)
-            && matches!(self.color_space, S::Lab | S::Oklab)
-        {
-            self.flags |= source.flags & F::C1_IS_NONE;
-            self.flags |= source.flags & F::C2_IS_NONE;
-        }
-    }
-}
-
 /// Mix two colors already in the interpolation color space.
 fn mix_with_weights(
     left: &AbsoluteColor,
@@ -405,9 +353,7 @@ fn mix_with_weights(
 }
 
 fn convert_for_mix(color: &AbsoluteColor, color_space: ColorSpace) -> AbsoluteColor {
-    let mut converted = color.to_color_space(color_space);
-    converted.carry_forward_analogous_missing_components(color);
-    converted
+    color.to_color_space(color_space)
 }
 
 fn interpolate_premultiplied_component(

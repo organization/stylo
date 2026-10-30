@@ -420,6 +420,7 @@ macro_rules! trivial_to_animated_value {
 
 trivial_to_animated_value!(crate::Atom);
 trivial_to_animated_value!(Angle);
+trivial_to_animated_value!(crate::values::specified::Blend);
 trivial_to_animated_value!(ComputedUrl);
 trivial_to_animated_value!(bool);
 trivial_to_animated_value!(f32);

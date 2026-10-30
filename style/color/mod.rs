@@ -10,6 +10,7 @@ pub mod convert;
 mod color_function;
 pub mod component;
 pub mod gamut;
+pub mod layers;
 pub mod mix;
 pub mod parsing;
 mod to_css;
@@ -424,16 +425,6 @@ impl AbsoluteColor {
 
         let alpha = cd!(alpha, ColorFlags::ALPHA_IS_NONE);
 
-        // Lightness for Lab and Lch is clamped to [0..100].
-        if matches!(color_space, ColorSpace::Lab | ColorSpace::Lch) {
-            components.0 = components.0.clamp(0.0, 100.0);
-        }
-
-        // Lightness for Oklab and Oklch is clamped to [0..1].
-        if matches!(color_space, ColorSpace::Oklab | ColorSpace::Oklch) {
-            components.0 = components.0.clamp(0.0, 1.0);
-        }
-
         // Chroma must not be less than 0.
         if matches!(color_space, ColorSpace::Lch | ColorSpace::Oklch) {
             components.1 = components.1.max(0.0);
@@ -704,13 +695,44 @@ impl AbsoluteColor {
             ($v:expr) => {{ if $v.is_nan() { None } else { Some($v) } }};
         }
 
-        Self::new(
+        let mut converted = Self::new(
             color_space,
             nan_to_missing!(result.0),
             nan_to_missing!(result.1),
             nan_to_missing!(result.2),
             self.alpha(),
-        )
+        );
+        converted.carry_forward_analogous_missing_components(self);
+
+        // <https://drafts.csswg.org/css-color-4/#powerless>
+        // A hue that is powerless after converting into a polar color space,
+        // or that was powerless in the source color, is missing.
+        // Its colorfulness is zero then.
+        if let Some(index) = color_space.hue_index()
+            && (self.has_powerless_hue() || converted.has_powerless_hue())
+        {
+            converted.flags.insert(match index {
+                0 => ColorFlags::C0_IS_NONE,
+                _ => ColorFlags::C2_IS_NONE,
+            });
+            if color_space != ColorSpace::Hwb {
+                converted.components.1 = 0.0;
+            }
+        }
+        converted
+    }
+
+    /// Whether this color is achromatic in its own polar color space, so its
+    /// hue does not affect the color.
+    fn has_powerless_hue(&self) -> bool {
+        let [_, c1, c2, _] = *self.raw_components();
+        match self.color_space {
+            ColorSpace::Hsl => c1.abs() <= 0.001,
+            ColorSpace::Hwb => c1 + c2 >= 99.999,
+            ColorSpace::Lch => c1 <= 0.0015,
+            ColorSpace::Oklch => c1 <= 0.000004,
+            _ => false,
+        }
     }
 
     /// Convert a given `nscolor` to a Servo AbsoluteColor value.
@@ -739,6 +761,126 @@ impl From<PredefinedColorSpace> for ColorSpace {
             PredefinedColorSpace::Rec2020 => ColorSpace::Rec2020,
             PredefinedColorSpace::XyzD50 => ColorSpace::XyzD50,
             PredefinedColorSpace::XyzD65 => ColorSpace::XyzD65,
+        }
+    }
+}
+
+impl AbsoluteColor {
+    /// Calculate the flags that should be carried forward a color after converting
+    /// it to another color space according to:
+    /// <https://drafts.csswg.org/css-color-4/#interpolation-missing>
+    fn carry_forward_analogous_missing_components(&mut self, source: &AbsoluteColor) {
+        use ColorFlags as F;
+        use ColorSpace as S;
+
+        if source.color_space == self.color_space {
+            return;
+        }
+
+        // A color with no components left carries all of them forward as missing.
+        let components = F::C0_IS_NONE | F::C1_IS_NONE | F::C2_IS_NONE;
+        if source.flags.contains(components) {
+            self.flags |= components;
+            return;
+        }
+
+        // Reds             r, x
+        // Greens           g, y
+        // Blues            b, z
+        if source.color_space.is_rgb_or_xyz_like() && self.color_space.is_rgb_or_xyz_like() {
+            self.flags |= source.flags & components;
+            return;
+        }
+
+        // Without both opponent components, a lab-like color has no chroma or
+        // hue, and without chroma and hue an lch-like color has no opponent
+        // components.
+        if matches!(source.color_space, S::Lab | S::Oklab)
+            && source.flags.contains(F::C1_IS_NONE | F::C2_IS_NONE)
+        {
+            match self.color_space {
+                S::Lch | S::Oklch => self.flags |= F::C1_IS_NONE | F::C2_IS_NONE,
+                S::Hsl => self.flags |= F::C0_IS_NONE | F::C1_IS_NONE,
+                _ => {},
+            }
+        }
+        if matches!(source.color_space, S::Lch | S::Oklch)
+            && source.flags.contains(F::C1_IS_NONE | F::C2_IS_NONE)
+            && matches!(self.color_space, S::Lab | S::Oklab)
+        {
+            self.flags |= F::C1_IS_NONE | F::C2_IS_NONE;
+        }
+
+        // An hwb() color with both whiteness and blackness missing has no
+        // lightness or colorfulness, like an hsl() color with both missing.
+        let hwb_without_lightness = matches!(source.color_space, S::Hwb)
+            && source.flags.contains(F::C1_IS_NONE | F::C2_IS_NONE);
+        if hwb_without_lightness {
+            match self.color_space {
+                S::Hsl => self.flags |= F::C1_IS_NONE | F::C2_IS_NONE,
+                S::Lch | S::Oklch => self.flags |= F::C0_IS_NONE | F::C1_IS_NONE,
+                S::Lab | S::Oklab => self.flags |= F::C0_IS_NONE,
+                _ => {},
+            }
+        }
+        if matches!(self.color_space, S::Hwb) {
+            let without_lightness = match source.color_space {
+                S::Hsl => source.flags.contains(F::C1_IS_NONE | F::C2_IS_NONE),
+                S::Lch | S::Oklch => source.flags.contains(F::C0_IS_NONE | F::C1_IS_NONE),
+                _ => false,
+            };
+            if without_lightness {
+                self.flags |= F::C1_IS_NONE | F::C2_IS_NONE;
+            }
+        }
+
+        // Lightness        L
+        if matches!(source.color_space, S::Lab | S::Lch | S::Oklab | S::Oklch) {
+            if matches!(self.color_space, S::Lab | S::Lch | S::Oklab | S::Oklch) {
+                self.flags |= source.flags & F::C0_IS_NONE;
+            } else if matches!(self.color_space, S::Hsl) && source.flags.contains(F::C0_IS_NONE) {
+                self.flags.insert(F::C2_IS_NONE)
+            }
+        } else if matches!(source.color_space, S::Hsl)
+            && matches!(self.color_space, S::Lab | S::Lch | S::Oklab | S::Oklch)
+            && source.flags.contains(F::C2_IS_NONE)
+        {
+            self.flags.insert(F::C0_IS_NONE)
+        }
+
+        // Colorfulness     C, S
+        if matches!(source.color_space, S::Hsl | S::Lch | S::Oklch)
+            && matches!(self.color_space, S::Hsl | S::Lch | S::Oklch)
+        {
+            self.flags |= source.flags & F::C1_IS_NONE;
+        }
+
+        // Hue              H
+        if matches!(source.color_space, S::Hsl | S::Hwb) {
+            if matches!(self.color_space, S::Hsl | S::Hwb) {
+                self.flags |= source.flags & F::C0_IS_NONE;
+            } else if matches!(self.color_space, S::Lch | S::Oklch)
+                && source.flags.contains(F::C0_IS_NONE)
+            {
+                self.flags.insert(F::C2_IS_NONE)
+            }
+        } else if matches!(source.color_space, S::Lch | S::Oklch) {
+            if matches!(self.color_space, S::Hsl | S::Hwb) {
+                if source.flags.contains(F::C2_IS_NONE) {
+                    self.flags.insert(F::C0_IS_NONE)
+                }
+            } else if matches!(self.color_space, S::Lch | S::Oklch) {
+                self.flags |= source.flags & F::C2_IS_NONE;
+            }
+        }
+
+        // Opponent         a, a
+        // Opponent         b, b
+        if matches!(source.color_space, S::Lab | S::Oklab)
+            && matches!(self.color_space, S::Lab | S::Oklab)
+        {
+            self.flags |= source.flags & F::C1_IS_NONE;
+            self.flags |= source.flags & F::C2_IS_NONE;
         }
     }
 }

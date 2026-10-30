@@ -101,6 +101,29 @@ impl ColorFunction<SpecifiedColor> {
         self.origin_color().is_some()
     }
 
+    /// Returns whether any component of this modern color function is a math
+    /// function, which a specified value keeps when it serializes. The legacy
+    /// rgb(), hsl() and hwb() functions resolve at parse time when they can.
+    pub fn has_calc_component(&self) -> bool {
+        let calc = |component: &ColorComponent<NumberOrPercentageComponent>| {
+            matches!(component, ColorComponent::Calc(..))
+        };
+        let calc_hue = |component: &ColorComponent<NumberOrAngleComponent>| {
+            matches!(component, ColorComponent::Calc(..))
+        };
+        match self {
+            Self::Lab(_, c0, c1, c2, alpha)
+            | Self::Oklab(_, c0, c1, c2, alpha)
+            | Self::Color(_, c0, c1, c2, alpha, _) => {
+                calc(c0) || calc(c1) || calc(c2) || calc(alpha)
+            },
+            Self::Lch(_, c0, c1, h, alpha) | Self::Oklch(_, c0, c1, h, alpha) => {
+                calc(c0) || calc(c1) || calc_hue(h) || calc(alpha)
+            },
+            Self::Rgb(..) | Self::Hsl(..) | Self::Hwb(..) | Self::Alpha(..) => false,
+        }
+    }
+
     /// Try to compute the color function to a computed color.
     ///
     /// If the origin color (if any) is absolute, the function is resolved to an
@@ -323,7 +346,11 @@ impl ColorFunction<ComputedColor> {
                         resolve(b)?,
                         alpha!(alpha),
                     );
-                    result.flags.insert(ColorFlags::IS_LEGACY_SRGB);
+                    // The legacy rgb() syntax cannot represent `none`, so a color with
+                    // missing components keeps them and serializes as `color(srgb ...)`.
+                    if !result.flags.intersects(ColorFlags::NONE_FLAGS) {
+                        result.flags.insert(ColorFlags::IS_LEGACY_SRGB);
+                    }
                     result
                 }
             },
@@ -393,7 +420,8 @@ impl ColorFunction<ComputedColor> {
 
                 AbsoluteColor::new(
                     ColorSpace::Lab,
-                    l.resolve()?.map(|l| l.to_number(LIGHTNESS_RANGE)),
+                    l.resolve()?
+                        .map(|l| l.to_number(LIGHTNESS_RANGE).clamp(0.0, LIGHTNESS_RANGE)),
                     a.resolve()?.map(|a| a.to_number(A_B_RANGE)),
                     b.resolve()?.map(|b| b.to_number(A_B_RANGE)),
                     alpha!(alpha),
@@ -407,7 +435,8 @@ impl ColorFunction<ComputedColor> {
 
                 AbsoluteColor::new(
                     ColorSpace::Lch,
-                    l.resolve()?.map(|l| l.to_number(LIGHTNESS_RANGE)),
+                    l.resolve()?
+                        .map(|l| l.to_number(LIGHTNESS_RANGE).clamp(0.0, LIGHTNESS_RANGE)),
                     c.resolve()?.map(|c| c.to_number(CHROMA_RANGE)),
                     h.resolve()?.map(|angle| normalize_hue(angle.degrees())),
                     alpha!(alpha),
@@ -421,7 +450,8 @@ impl ColorFunction<ComputedColor> {
 
                 AbsoluteColor::new(
                     ColorSpace::Oklab,
-                    l.resolve()?.map(|l| l.to_number(LIGHTNESS_RANGE)),
+                    l.resolve()?
+                        .map(|l| l.to_number(LIGHTNESS_RANGE).clamp(0.0, LIGHTNESS_RANGE)),
                     a.resolve()?.map(|a| a.to_number(A_B_RANGE)),
                     b.resolve()?.map(|b| b.to_number(A_B_RANGE)),
                     alpha!(alpha),
@@ -435,7 +465,8 @@ impl ColorFunction<ComputedColor> {
 
                 AbsoluteColor::new(
                     ColorSpace::Oklch,
-                    l.resolve()?.map(|l| l.to_number(LIGHTNESS_RANGE)),
+                    l.resolve()?
+                        .map(|l| l.to_number(LIGHTNESS_RANGE).clamp(0.0, LIGHTNESS_RANGE)),
                     c.resolve()?.map(|c| c.to_number(CHROMA_RANGE)),
                     h.resolve()?.map(|angle| normalize_hue(angle.degrees())),
                     alpha!(alpha),
@@ -524,6 +555,109 @@ impl<C: style_traits::ToCss> style_traits::ToCss for ColorFunction<C> {
             if trailing_space {
                 dest.write_str(" ")?;
             }
+        }
+
+        // Without an origin color, plain components serialize as numbers in
+        // their reference range, clamped as they are when computed, while math
+        // functions are kept as written.
+        // <https://drafts.csswg.org/css-color-4/#serializing-color-function-values>
+        let plain = origin_color.is_none();
+        let number = |dest: &mut style_traits::CssWriter<W>,
+                      component: &ColorComponent<NumberOrPercentageComponent>,
+                      basis: f32,
+                      min: Option<f32>,
+                      max: Option<f32>|
+         -> std::fmt::Result {
+            match component {
+                ColorComponent::Value(value) if plain => {
+                    let mut number = value.to_number(basis);
+                    if let Some(min) = min {
+                        number = number.max(min);
+                    }
+                    if let Some(max) = max {
+                        number = number.min(max);
+                    }
+                    number.to_css(dest)
+                },
+                _ => component.to_css(dest),
+            }
+        };
+        let hue = |dest: &mut style_traits::CssWriter<W>,
+                   component: &ColorComponent<NumberOrAngleComponent>|
+         -> std::fmt::Result {
+            match component {
+                ColorComponent::Value(value) if plain => value.degrees().to_css(dest),
+                _ => component.to_css(dest),
+            }
+        };
+        if plain {
+            const NONE: Option<f32> = None;
+            match self {
+                Self::Rgb(_, c0, c1, c2, _) => {
+                    for (index, component) in [c0, c1, c2].into_iter().enumerate() {
+                        if index != 0 {
+                            dest.write_char(' ')?;
+                        }
+                        number(dest, component, 255.0, Some(0.0), Some(255.0))?;
+                    }
+                },
+                Self::Hsl(_, h, s, l, _) => {
+                    hue(dest, h)?;
+                    dest.write_char(' ')?;
+                    number(dest, s, 100.0, Some(0.0), NONE)?;
+                    dest.write_char(' ')?;
+                    number(dest, l, 100.0, NONE, NONE)?;
+                },
+                Self::Hwb(_, h, w, b, _) => {
+                    hue(dest, h)?;
+                    dest.write_char(' ')?;
+                    number(dest, w, 100.0, NONE, NONE)?;
+                    dest.write_char(' ')?;
+                    number(dest, b, 100.0, NONE, NONE)?;
+                },
+                Self::Lab(_, l, a, b, _) | Self::Oklab(_, l, a, b, _) => {
+                    let (lightness, opponent) = if matches!(self, Self::Lab(..)) {
+                        (100.0, 125.0)
+                    } else {
+                        (1.0, 0.4)
+                    };
+                    number(dest, l, lightness, Some(0.0), Some(lightness))?;
+                    dest.write_char(' ')?;
+                    number(dest, a, opponent, NONE, NONE)?;
+                    dest.write_char(' ')?;
+                    number(dest, b, opponent, NONE, NONE)?;
+                },
+                Self::Lch(_, l, c, h, _) | Self::Oklch(_, l, c, h, _) => {
+                    let (lightness, chroma) = if matches!(self, Self::Lch(..)) {
+                        (100.0, 150.0)
+                    } else {
+                        (1.0, 0.4)
+                    };
+                    number(dest, l, lightness, Some(0.0), Some(lightness))?;
+                    dest.write_char(' ')?;
+                    number(dest, c, chroma, Some(0.0), NONE)?;
+                    dest.write_char(' ')?;
+                    hue(dest, h)?;
+                },
+                Self::Color(_, c0, c1, c2, _, color_space) => {
+                    color_space.to_css(dest)?;
+                    for component in [c0, c1, c2] {
+                        dest.write_char(' ')?;
+                        number(dest, component, 1.0, NONE, NONE)?;
+                    }
+                },
+                Self::Alpha(..) => {},
+            }
+            let omit_alpha = match *alpha {
+                ColorComponent::AlphaOmitted => true,
+                ColorComponent::Value(ref v) => v.to_number(OPAQUE) >= OPAQUE,
+                _ => false,
+            };
+            if !omit_alpha {
+                dest.write_str(" / ")?;
+                number(dest, alpha, 1.0, Some(0.0), Some(OPAQUE))?;
+            }
+            return dest.write_str(")");
         }
 
         macro_rules! serialize_components {
