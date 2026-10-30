@@ -332,6 +332,11 @@ impl ToCss for SpecifiedValue {
     where
         W: Write,
     {
+        // An empty custom property serializes as a single space.
+        // https://drafts.csswg.org/css-variables-1/#serializing-custom-props
+        if self.css.is_empty() {
+            return dest.write_char(' ');
+        }
         dest.write_str(&self.css)
     }
 }
