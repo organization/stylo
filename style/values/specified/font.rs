@@ -14,6 +14,7 @@ use crate::values::computed::font::{FamilyName, FontFamilyList, SingleFontFamily
 use crate::values::computed::{CSSPixelLength, Context, ToComputedValue};
 use crate::values::computed::{Length, NonNegativeLength, font as computed};
 use crate::values::generics::NonNegative;
+use crate::values::generics::color::{ColorMixFlags, GenericColorMix, GenericColorMixItem};
 use crate::values::generics::font::{
     self as generics, FeatureTagValue, FontSettings, FontTag, GenericLineHeight, VariationValue,
 };
@@ -1633,49 +1634,54 @@ pub enum FontSynthesisStyle {
     ObliqueOnly,
 }
 
-#[derive(
-    Clone,
-    Debug,
-    Deserialize,
-    Eq,
-    MallocSizeOf,
-    PartialEq,
-    Serialize,
-    SpecifiedValueInfo,
-    ToComputedValue,
-    ToResolvedValue,
-    ToShmem,
-    ToTyped,
-)]
-#[repr(C)]
-#[typed(todo_derive_fields)]
 /// Allows authors to choose a palette from those supported by a color font
-/// (and potentially @font-palette-values overrides).
-pub struct FontPalette(Atom);
+/// (and potentially @font-palette-values overrides), or to mix palettes.
+#[derive(Clone, Debug, MallocSizeOf, PartialEq, ToShmem)]
+pub enum FontPalette {
+    /// `normal`, `light`, `dark` or a `<dashed-ident>`.
+    Ident(Atom),
+    /// <https://drafts.csswg.org/css-fonts-5/#typedef-font-palette-palette-mix>
+    Mix(Box<GenericColorMix<FontPalette, crate::values::specified::Percentage>>),
+}
 
 #[allow(missing_docs)]
 impl FontPalette {
     pub fn normal() -> Self {
-        Self(atom!("normal"))
+        Self::Ident(atom!("normal"))
     }
     pub fn light() -> Self {
-        Self(atom!("light"))
+        Self::Ident(atom!("light"))
     }
     pub fn dark() -> Self {
-        Self(atom!("dark"))
+        Self::Ident(atom!("dark"))
     }
 }
 
+impl SpecifiedValueInfo for FontPalette {}
+
+impl crate::typed_om::ToTyped for FontPalette {}
+
 impl Parse for FontPalette {
-    /// normal | light | dark | dashed-ident
-    fn parse(_context: &ParserContext, input: &mut Parser) -> Result<FontPalette, ParseError> {
+    /// normal | light | dark | dashed-ident | palette-mix()
+    fn parse(context: &ParserContext, input: &mut Parser) -> Result<FontPalette, ParseError> {
+        if let Ok(mix) = input.try_parse(|input| {
+            crate::values::specified::color::parse_mix(
+                context,
+                input,
+                "palette-mix",
+                ColorMixFlags::PALETTE,
+                Self::parse,
+            )
+        }) {
+            return Ok(Self::Mix(Box::new(mix)));
+        }
         let ident = input.expect_ident()?;
         match_ignore_ascii_case! { &ident,
             "normal" => Ok(Self::normal()),
             "light" => Ok(Self::light()),
             "dark" => Ok(Self::dark()),
             _ => if ident.starts_with("--") {
-                Ok(Self(Atom::from(ident.as_ref())))
+                Ok(Self::Ident(Atom::from(ident.as_ref())))
             } else {
                 Err(ParseError::custom(SelectorParseErrorKind::UnexpectedIdent))
             },
@@ -1688,7 +1694,47 @@ impl ToCss for FontPalette {
     where
         W: Write,
     {
-        serialize_atom_identifier(&self.0, dest)
+        match *self {
+            Self::Ident(ref atom) => serialize_atom_identifier(atom, dest),
+            Self::Mix(ref mix) => mix.to_css(dest),
+        }
+    }
+}
+
+impl ToComputedValue for FontPalette {
+    type ComputedValue = computed::FontPalette;
+
+    fn to_computed_value(&self, context: &Context) -> computed::FontPalette {
+        match *self {
+            Self::Ident(ref atom) => computed::FontPalette(atom.clone()),
+            Self::Mix(ref mix) => {
+                // Omitted percentages get their share of the weight left over by
+                // the specified ones.
+                let fill = mix.omitted_weight().unwrap_or(0.0);
+                let computed = GenericColorMix {
+                    interpolation: mix.interpolation,
+                    items: mix
+                        .items
+                        .iter()
+                        .map(|item| GenericColorMixItem {
+                            color: item.color.to_computed_value(context),
+                            percentage: crate::values::generics::Optional::Some(
+                                item.percentage
+                                    .as_ref()
+                                    .map(|p| p.to_computed_value(context))
+                                    .unwrap_or(ComputedPercentage(fill)),
+                            ),
+                        })
+                        .collect(),
+                    flags: mix.flags,
+                };
+                computed::FontPalette(Atom::from(computed.to_css_string()))
+            },
+        }
+    }
+
+    fn from_computed_value(computed: &computed::FontPalette) -> Self {
+        Self::Ident(computed.0.clone())
     }
 }
 

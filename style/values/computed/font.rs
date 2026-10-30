@@ -36,7 +36,7 @@ pub use crate::values::computed::Length as MozScriptMinSize;
 pub use crate::values::specified::Integer as SpecifiedInteger;
 pub use crate::values::specified::Number as SpecifiedNumber;
 pub use crate::values::specified::font::{
-    FontKerning, FontOpticalSizing, FontPalette, FontSmoothing, FontSynthesis, FontSynthesisStyle,
+    FontKerning, FontOpticalSizing, FontSmoothing, FontSynthesis, FontSynthesisStyle,
     FontVariantCaps, FontVariantEmoji, FontVariantPosition, MathShift, MathStyle, MathVariant,
     MozScriptSizeMultiplier,
 };
@@ -1543,5 +1543,44 @@ impl ToResolvedValue for LineHeight {
     #[inline]
     fn from_resolved_value(value: Self::ResolvedValue) -> Self {
         value
+    }
+}
+
+/// The computed value of `font-palette`. A `palette-mix()` is kept as its
+/// serialization.
+#[derive(
+    Clone,
+    Debug,
+    Deserialize,
+    Eq,
+    MallocSizeOf,
+    PartialEq,
+    Serialize,
+    ToAnimatedValue,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+#[repr(C)]
+#[typed(todo_derive_fields)]
+pub struct FontPalette(pub Atom);
+
+impl FontPalette {
+    /// The `normal` palette.
+    pub fn normal() -> Self {
+        Self(atom!("normal"))
+    }
+}
+
+impl ToCss for FontPalette {
+    fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
+    where
+        W: Write,
+    {
+        if self.0.starts_with("palette-mix(") {
+            dest.write_str(&self.0)
+        } else {
+            crate::values::serialize_atom_identifier(&self.0, dest)
+        }
     }
 }
