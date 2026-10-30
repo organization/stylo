@@ -2202,7 +2202,9 @@ pub enum ObjectFit {
 impl Parse for ObjectFit {
     fn parse<'i>(_: &ParserContext, input: &mut Parser<'i>) -> Result<Self, ParseError> {
         let scale_down = |input: &mut Parser<'i>| {
-            input.try_parse(|i| i.expect_ident_matching("scale-down")).is_ok()
+            input
+                .try_parse(|i| i.expect_ident_matching("scale-down"))
+                .is_ok()
         };
         let ident = input.expect_ident()?.clone();
         let fit = cssparser::match_ignore_ascii_case! { &ident,
