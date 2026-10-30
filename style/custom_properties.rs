@@ -398,7 +398,9 @@ fn reify_variable_value_range(
 
         *reference_index += 1;
 
-        if reference.substitution_kind != SubstitutionFunctionKind::Var {
+        if reference.substitution_kind != SubstitutionFunctionKind::Var
+            || reference.name_argument.is_some()
+        {
             return Err(());
         }
 
@@ -821,11 +823,27 @@ pub struct VariableFallback {
     pub references: References,
 }
 
+/// The name argument of a var() that is not a literal custom property name. It is substituted and
+/// only then parsed as a `<custom-property-name>`.
+/// https://drafts.csswg.org/css-variables-2/#replace-a-var-function
+#[derive(Clone, Debug, MallocSizeOf, PartialEq, ToShmem)]
+pub struct VariableNameArgument {
+    start: usize,
+    end: usize,
+    first_token_type: TokenSerializationType,
+    last_token_type: TokenSerializationType,
+    /// References from the name argument.
+    pub references: References,
+}
+
 /// A reference to a substitution function like env() / var() / attr().
 #[derive(Clone, Debug, MallocSizeOf, PartialEq, ToShmem)]
 pub struct SubstitutionFunctionReference {
     /// The identifier for this substitution function (the first argument).
     pub name: Name,
+    /// For var(), the name argument when it is not a literal custom property name. `name` is
+    /// meaningless then.
+    pub name_argument: Option<Box<VariableNameArgument>>,
     start: usize,
     end: usize,
     /// The fallback for this function, if any.
@@ -1223,22 +1241,19 @@ fn parse_declaration_value_block(
                             input.reset(&prev);
                             next?;
                         }
-                        // TODO(emilio): For env() this should be <custom-ident> per spec, but no other browser does
-                        // that, see https://github.com/w3c/csswg-drafts/issues/3262.
-                        let name = input.expect_ident()?;
-                        let name =
-                            Atom::from(if substitution_kind == SubstitutionFunctionKind::Var {
-                                match parse_name(name.as_ref()) {
-                                    Ok(name) => name,
-                                    Err(()) => {
-                                        return Err(ParseError::custom(
-                                            SelectorParseErrorKind::UnexpectedIdent,
-                                        ));
-                                    },
-                                }
+                        let (name, name_argument) =
+                            if substitution_kind == SubstitutionFunctionKind::Var {
+                                parse_var_name(
+                                    input,
+                                    input_start,
+                                    namespaces,
+                                    missing_closing_characters,
+                                )?
                             } else {
-                                name.as_ref()
-                            });
+                                // TODO(emilio): For env() this should be <custom-ident> per spec, but no other browser does
+                                // that, see https://github.com/w3c/csswg-drafts/issues/3262.
+                                (Atom::from(input.expect_ident()?.as_ref()), None)
+                            };
 
                         let attribute_kind = if substitution_kind == SubstitutionFunctionKind::Attr
                         {
@@ -1253,6 +1268,7 @@ fn parse_declaration_value_block(
                         let start = token_start.byte_index() - input_start.byte_index();
                         references.refs.push(SubstitutionFunctionReference {
                             name,
+                            name_argument,
                             start,
                             // To be fixed up after parsing fallback and auto-closing via our_ref_index.
                             end: start,
@@ -1322,7 +1338,11 @@ fn parse_declaration_value_block(
                         SubstitutionFunctionKind::Env => ReferenceFlags::ENV,
                         SubstitutionFunctionKind::Attr => ReferenceFlags::ATTR,
                     };
-                    // Bubble up flags from our fallback, so we know what we might reference from the outer scope.
+                    // Bubble up flags from our name argument and fallback, so we know what we might
+                    // reference from the outer scope.
+                    if let Some(ref argument) = reference.name_argument {
+                        references.flags |= argument.references.flags;
+                    }
                     if let Some(ref fb) = reference.fallback {
                         references.flags |= fb.references.flags;
                     }
@@ -1372,6 +1392,119 @@ fn parse_declaration_value_block(
         };
     }
     Ok((first_token_type, last_token_type))
+}
+
+/// Parses a string that must be exactly one `<custom-property-name>`.
+fn parse_custom_property_name(css: &str) -> Result<Name, ()> {
+    let mut input = Parser::new(css);
+    let name = Atom::from(parse_name(input.expect_ident().map_err(|_| ())?.as_ref())?);
+    input.expect_exhausted().map_err(|_| ())?;
+    Ok(name)
+}
+
+/// Parses the first argument of a var(). A literal custom property name is resolved right away.
+/// Anything else is a `<declaration-value>`, optionally {}-wrapped, that is substituted and parsed
+/// as a `<custom-property-name>` at computed-value time.
+/// https://drafts.csswg.org/css-variables-2/#funcdef-var
+/// https://drafts.csswg.org/css-values-5/#component-function-commas
+fn parse_var_name(
+    input: &mut Parser,
+    input_start: SourcePosition,
+    namespaces: Option<&FxHashMap<Prefix, Namespace>>,
+    missing_closing_characters: &mut String,
+) -> Result<(Name, Option<Box<VariableNameArgument>>), ParseError> {
+    let literal = input.try_parse(|input| {
+        let name = Atom::from(
+            parse_name(input.expect_ident()?.as_ref())
+                .map_err(|()| ParseError::custom(SelectorParseErrorKind::UnexpectedIdent))?,
+        );
+        let state = input.state();
+        match input.next() {
+            Ok(&Token::Comma) => input.reset(&state),
+            Ok(_) => return Err(ParseError::unexpected_token()),
+            Err(_) => {},
+        }
+        Ok::<_, ParseError>(name)
+    });
+    if let Ok(name) = literal {
+        return Ok((name, None));
+    }
+
+    input.skip_whitespace();
+    let mut references = References::default();
+    let (start, end, first_token_type, last_token_type) = if input
+        .try_parse(|input| input.expect_curly_bracket_block())
+        .is_ok()
+    {
+        let mut range = None;
+        input.parse_nested_block(|input| {
+            input.skip_whitespace();
+            let start = input.position();
+            let (first, last) = parse_declaration_value_block(
+                input,
+                input_start,
+                namespaces,
+                &mut references,
+                missing_closing_characters,
+            )?;
+            range = Some((start, input.position(), first, last));
+            Ok(())
+        })?;
+        let range = range.unwrap();
+        if range.1 == input.position() {
+            missing_closing_characters.push('}');
+        }
+        let state = input.state();
+        match input.next() {
+            Ok(&Token::Comma) => input.reset(&state),
+            Ok(_) => return Err(ParseError::unexpected_token()),
+            Err(_) => {},
+        }
+        range
+    } else {
+        // Unless the whole argument is {}-wrapped, it can't contain a {} block.
+        let state = input.state();
+        loop {
+            match input.next_including_whitespace_and_comments() {
+                Ok(&Token::CurlyBracketBlock) => return Err(ParseError::unexpected_token()),
+                Ok(&Token::Comma) | Err(_) => break,
+                Ok(_) => {},
+            }
+        }
+        input.reset(&state);
+        let start = input.position();
+        let (first, last) = input.parse_until_before(
+            Delimiter::Comma | Delimiter::Bang | Delimiter::Semicolon,
+            |input| {
+                parse_declaration_value_block(
+                    input,
+                    input_start,
+                    namespaces,
+                    &mut references,
+                    missing_closing_characters,
+                )
+            },
+        )?;
+        (start, input.position(), first, last)
+    };
+    if matches!(first_token_type, TokenSerializationType::Nothing) {
+        return Err(ParseError::custom(StyleParseErrorKind::UnspecifiedError));
+    }
+    if !references.has_references()
+        && let Ok(name) = parse_custom_property_name(input.slice(start..end))
+    {
+        return Ok((name, None));
+    }
+    Ok((
+        Atom::from(""),
+        Some(Box::new(VariableNameArgument {
+            start: start.byte_index() - input_start.byte_index(),
+            end: end.byte_index() - input_start.byte_index(),
+            first_token_type,
+            last_token_type,
+            references,
+        })),
+    ))
 }
 
 /// Parse <attr-type> = type( <syntax> ) | raw-string | number | <attr-unit>.
@@ -1726,7 +1859,7 @@ fn do_substitute_chunk<'a>(
     computed_context: &computed::Context,
     references: &'a [SubstitutionFunctionReference],
     attribute_tracker: &mut AttributeTracker,
-    seen: &mut SmallVec<[&'a Name; 8]>,
+    seen: &mut SmallVec<[Name; 8]>,
     mut attr_taint: Option<&mut AttrTaint>,
 ) -> Result<Substitution<'a>, ()> {
     if start == end {
@@ -1818,7 +1951,7 @@ fn substitute_one_reference<'a>(
     stylist: &Stylist,
     computed_context: &computed::Context,
     attribute_tracker: &mut AttributeTracker,
-    seen: &mut SmallVec<[&'a Name; 8]>,
+    seen: &mut SmallVec<[Name; 8]>,
 ) -> Result<Substitution<'a>, ()> {
     let simple_attr_subst = |s: &str| {
         Some(Substitution::new(
@@ -1828,10 +1961,35 @@ fn substitute_one_reference<'a>(
             /* attr_tainted */ true,
         ))
     };
+    let mut name_tainted = false;
     let substitution: Option<_> = match reference.substitution_kind {
         SubstitutionFunctionKind::Var => {
-            let registration = stylist.get_custom_property_registration(&reference.name);
-            match substitution_functions.get_var(registration, &reference.name) {
+            let name = match reference.name_argument {
+                None => Some(Cow::Borrowed(&reference.name)),
+                Some(ref argument) => {
+                    let (name, tainted) = substitute_var_name(
+                        css,
+                        url_data,
+                        argument,
+                        property_id,
+                        substitution_functions,
+                        stylist,
+                        computed_context,
+                        attribute_tracker,
+                        seen,
+                    );
+                    name_tainted = tainted;
+                    name.map(Cow::Owned)
+                },
+            };
+            let registration = match name {
+                Some(ref name) => stylist.get_custom_property_registration(name),
+                None => PropertyDescriptors::unregistered(),
+            };
+            match name
+                .as_ref()
+                .and_then(|name| substitution_functions.get_var(registration, name))
+            {
                 None => None,
                 // If the referenced value is itself still unresolved (i.e. it has references), we
                 // are substituting against a partially-resolved map -- this happens while applying
@@ -1840,12 +1998,13 @@ fn substitute_one_reference<'a>(
                 // may not have gotten to this variable yet).
                 Some(v) => match v.as_universal() {
                     Some(u) if u.has_references() => {
-                        if seen.contains(&&reference.name) {
+                        let name = name.unwrap().into_owned();
+                        if seen.contains(&name) {
                             // Cycle: the primary is guaranteed-invalid, so fall through to the
                             // fallback (if any), like any other invalid primary.
                             None
                         } else {
-                            seen.push(&reference.name);
+                            seen.push(name);
                             let result = substitute_internal(
                                 u,
                                 property_id,
@@ -1859,7 +2018,7 @@ fn substitute_one_reference<'a>(
                             seen.pop();
                             match result {
                                 Ok(mut substitution) => {
-                                    substitution.attr_tainted |= v.attr_tainted;
+                                    substitution.attr_tainted |= v.attr_tainted | name_tainted;
                                     Some(substitution)
                                 },
                                 // The primary couldn't be resolved (invalid); use the fallback.
@@ -1869,7 +2028,7 @@ fn substitute_one_reference<'a>(
                     },
                     _ => Some(Substitution::from_value(
                         v.to_variable_value(),
-                        v.attr_tainted,
+                        v.attr_tainted | name_tainted,
                     )),
                 },
             }
@@ -1979,7 +2138,7 @@ fn substitute_one_reference<'a>(
         return Err(());
     };
 
-    do_substitute_chunk(
+    let mut substitution = do_substitute_chunk(
         css,
         fallback.start.get(),
         reference.end - 1, // Skip the closing parenthesis of the reference value.
@@ -1994,7 +2153,46 @@ fn substitute_one_reference<'a>(
         attribute_tracker,
         seen,
         /* attr_taint */ None,
-    )
+    )?;
+    substitution.attr_tainted |= name_tainted;
+    Ok(substitution)
+}
+
+/// Substitutes the name argument of a var() and parses the result as a `<custom-property-name>`.
+/// Returns the name, if it parses, and whether the substituted argument is attr()-tainted.
+pub(crate) fn substitute_var_name(
+    css: &str,
+    url_data: &UrlExtraData,
+    argument: &VariableNameArgument,
+    property_id: Option<PropertyIdRef>,
+    substitution_functions: &ComputedSubstitutionFunctions,
+    stylist: &Stylist,
+    computed_context: &computed::Context,
+    attribute_tracker: &mut AttributeTracker,
+    seen: &mut SmallVec<[Name; 8]>,
+) -> (Option<Name>, bool) {
+    match do_substitute_chunk(
+        css,
+        argument.start,
+        argument.end,
+        argument.first_token_type,
+        argument.last_token_type,
+        url_data,
+        property_id,
+        substitution_functions,
+        stylist,
+        computed_context,
+        &argument.references.refs,
+        attribute_tracker,
+        seen,
+        /* attr_taint */ None,
+    ) {
+        Ok(substitution) => (
+            parse_custom_property_name(&substitution.css).ok(),
+            substitution.attr_tainted,
+        ),
+        Err(()) => (None, false),
+    }
 }
 
 /// Replace `var()`, `env()`, and `attr()` functions. Return `Err(..)` for invalid at computed time.
@@ -2005,7 +2203,7 @@ fn substitute_internal<'a>(
     stylist: &Stylist,
     computed_context: &computed::Context,
     attribute_tracker: &mut AttributeTracker,
-    seen: &mut SmallVec<[&'a Name; 8]>,
+    seen: &mut SmallVec<[Name; 8]>,
     attr_taint: Option<&mut AttrTaint>,
 ) -> Result<Substitution<'a>, ()> {
     do_substitute_chunk(

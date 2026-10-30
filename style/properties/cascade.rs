@@ -14,6 +14,7 @@ use crate::custom_properties::{
     ReferenceFlags, References, SingleNonCustomReference, SubstitutionFunctionKind, VariableValue,
     get_attr_value_for_cycle_resolution, handle_invalid_at_computed_value_time,
     remove_and_insert_initial_value, substitute_references_if_needed_and_apply,
+    substitute_var_name,
 };
 use crate::dom::{AttributeTracker, DummyElementContext, ElementContext, TElement};
 #[cfg(feature = "gecko")]
@@ -2057,22 +2058,29 @@ impl<'a> Cascade<'a> {
         }
         self.may_have_custom_property_cycles = true;
 
-        for next in &refs.refs {
-            if !next.is_attr_with_type() || !self.seen.custom.attr.insert(&next.name) {
-                // Only type() can have nested references, so we don't need to eagerly look at
-                // others.
-                continue;
-            }
-            if let Ok(v) = get_attr_value_for_cycle_resolution(
-                &next.name,
-                &next.attribute_data,
-                &value.url_data,
-                attribute_tracker,
-            ) {
-                context
-                    .builder
-                    .substitution_functions
-                    .insert_attr(&next.name, v);
+        let mut refs_stack = SmallVec::<[&'a References; 2]>::new();
+        refs_stack.push(refs);
+        while let Some(refs) = refs_stack.pop() {
+            for next in &refs.refs {
+                if let Some(ref argument) = next.name_argument {
+                    refs_stack.push(&argument.references);
+                }
+                if !next.is_attr_with_type() || !self.seen.custom.attr.insert(&next.name) {
+                    // Only type() can have nested references, so we don't need to eagerly look at
+                    // others.
+                    continue;
+                }
+                if let Ok(v) = get_attr_value_for_cycle_resolution(
+                    &next.name,
+                    &next.attribute_data,
+                    &value.url_data,
+                    attribute_tracker,
+                ) {
+                    context
+                        .builder
+                        .substitution_functions
+                        .insert_attr(&next.name, v);
+                }
             }
         }
     }
@@ -2280,6 +2288,7 @@ fn substitute_all(
     fn visit_value_references<'a, 'b, 'c, 'd>(
         var: &VarType,
         root: &References,
+        css: &str,
         url_data: &UrlExtraData,
         index: usize,
         references_from_non_custom_properties: &NonCustomReferenceMap<Vec<Arc<UnparsedValue>>>,
@@ -2310,7 +2319,8 @@ fn substitute_all(
                     continue;
                 }
 
-                let next_var = if next.substitution_kind == SubstitutionFunctionKind::Attr {
+                let kind = next.substitution_kind;
+                let name = if kind == SubstitutionFunctionKind::Attr {
                     // An type()-less attr() within attr(... type()) can still have nested
                     // references.
                     let can_chain = next.is_attr_with_type() || matches!(var, VarType::Attr(..));
@@ -2327,9 +2337,49 @@ fn substitute_all(
                     {
                         context.map_mut().insert_attr(&next.name, val);
                     }
-                    VarType::Attr(next.name.clone())
+                    next.name.clone()
+                } else if let Some(ref argument) = next.name_argument {
+                    // The name argument is always substituted, so its references are
+                    // dependencies, and the custom property it names is one once it resolves.
+                    visit_value_references(
+                        var,
+                        &argument.references,
+                        css,
+                        url_data,
+                        index,
+                        references_from_non_custom_properties,
+                        context,
+                        lowlink,
+                        self_ref,
+                        attribute_tracker,
+                        non_custom_references,
+                    );
+                    let computed_context = &*context.computed_context;
+                    let (name, _) = substitute_var_name(
+                        css,
+                        url_data,
+                        argument,
+                        None,
+                        &computed_context.builder.substitution_functions,
+                        context.stylist,
+                        computed_context,
+                        attribute_tracker,
+                        &mut SmallVec::new(),
+                    );
+                    let Some(name) = name else {
+                        if let Some(ref fallback) = next.fallback {
+                            refs_stack.push(&fallback.references);
+                        }
+                        continue;
+                    };
+                    name
                 } else {
-                    VarType::Custom(next.name.clone())
+                    next.name.clone()
+                };
+                let next_var = if kind == SubstitutionFunctionKind::Attr {
+                    VarType::Attr(name.clone())
+                } else {
+                    VarType::Custom(name.clone())
                 };
 
                 visit_link(
@@ -2344,14 +2394,12 @@ fn substitute_all(
 
                 // Now that the primary reference has been resolved, classify it to
                 // decide whether its fallback is used.
-                let kind = next.substitution_kind;
                 let resolved = match kind {
                     SubstitutionFunctionKind::Var => {
-                        let registration =
-                            context.stylist.get_custom_property_registration(&next.name);
-                        context.map().get_var(registration, &next.name)
+                        let registration = context.stylist.get_custom_property_registration(&name);
+                        context.map().get_var(registration, &name)
                     },
-                    SubstitutionFunctionKind::Attr => context.map().get_attr(&next.name),
+                    SubstitutionFunctionKind::Attr => context.map().get_attr(&name),
                     SubstitutionFunctionKind::Env => unreachable!("Handled above"),
                 };
                 // The primary is guaranteed-invalid if it's absent from the map, or still
@@ -2535,6 +2583,7 @@ fn substitute_all(
             visit_value_references(
                 &var,
                 &v.references,
+                &v.css,
                 &v.url_data,
                 index,
                 references_from_non_custom_properties,
@@ -2595,6 +2644,7 @@ fn substitute_all(
                     visit_value_references(
                         &var,
                         &value.references,
+                        &value.css,
                         &value.url_data,
                         index,
                         references_from_non_custom_properties,
