@@ -56,7 +56,10 @@ pub use self::calc::{CalcLengthPercentage, CalcNumeric};
 pub use self::color::{
     Color, ColorOrAuto, ColorPropertyValue, ColorScheme, ForcedColorAdjust, PrintColorAdjust,
 };
-pub use self::column::{ColumnCount, ColumnFill, ColumnSpan};
+pub use self::column::{
+    ColumnCount, ColumnFill, ColumnSpan, LineColorList, LineStyleList, LineWidthList, RuleBreak,
+    RuleInset, RuleOverlap, RuleVisibilityItems,
+};
 pub use self::corner_shape::{CornerShape, CornerShapeRect, SuperellipseArg};
 pub use self::counters::{Content, ContentItem, CounterIncrement, CounterReset, CounterSet};
 pub use self::easing::TimingFunction;

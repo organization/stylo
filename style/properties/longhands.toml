@@ -589,31 +589,183 @@ servo_restyle_damage = "rebuild_box"
 affects = "layout"
 
 [column-rule-color]
-type = "Color"
-initial = "computed_value::T::currentcolor()"
-struct = "column"
-servo_pref = "layout.css.columns.enabled"
-ignored_when_colors_disabled = true
-spec = "https://drafts.csswg.org/css-multicol/#propdef-column-rule-color"
-affects = "paint"
-
-[column-rule-style]
-type = "BorderStyle"
-initial = "computed::BorderStyle::None"
+type = "LineColorList"
+initial = "computed::LineColorList::single(computed::Color::currentcolor())"
+initial_specified_value = "specified::LineColorList::single(specified::Color::currentcolor())"
 struct = "column"
 servo_pref = "layout.css.columns.enabled"
 animation_type = "discrete"
-spec = "https://drafts.csswg.org/css-multicol/#propdef-column-rule-style"
+ignored_when_colors_disabled = true
+spec = "https://drafts.csswg.org/css-gaps-1/#propdef-column-rule-color"
+affects = "paint"
+
+[column-rule-style]
+type = "LineStyleList"
+initial = "computed::LineStyleList::single(computed::BorderStyle::None)"
+initial_specified_value = "specified::LineStyleList::single(specified::BorderStyle::None)"
+struct = "column"
+servo_pref = "layout.css.columns.enabled"
+animation_type = "discrete"
+spec = "https://drafts.csswg.org/css-gaps-1/#propdef-column-rule-style"
 affects = "paint"
 
 [column-rule-width]
-type = "BorderSideWidth"
-initial = "computed::BorderSideWidth::medium()"
+type = "LineWidthList"
+initial = "computed::LineWidthList::single(computed::BorderSideWidth::medium())"
+initial_specified_value = "specified::LineWidthList::single(specified::BorderSideWidth::medium())"
 struct = "column"
 servo_pref = "layout.css.columns.enabled"
-initial_specified_value = "specified::BorderSideWidth::medium()"
-spec = "https://drafts.csswg.org/css-multicol/#propdef-column-rule-width"
+animation_type = "discrete"
+spec = "https://drafts.csswg.org/css-gaps-1/#propdef-column-rule-width"
 affects = "layout"
+
+[row-rule-color]
+type = "LineColorList"
+initial = "computed::LineColorList::single(computed::Color::currentcolor())"
+initial_specified_value = "specified::LineColorList::single(specified::Color::currentcolor())"
+struct = "column"
+servo_pref = "layout.css.columns.enabled"
+animation_type = "discrete"
+ignored_when_colors_disabled = true
+spec = "https://drafts.csswg.org/css-gaps-1/#propdef-row-rule-color"
+affects = "paint"
+
+[row-rule-style]
+type = "LineStyleList"
+initial = "computed::LineStyleList::single(computed::BorderStyle::None)"
+initial_specified_value = "specified::LineStyleList::single(specified::BorderStyle::None)"
+struct = "column"
+servo_pref = "layout.css.columns.enabled"
+animation_type = "discrete"
+spec = "https://drafts.csswg.org/css-gaps-1/#propdef-row-rule-style"
+affects = "paint"
+
+[row-rule-width]
+type = "LineWidthList"
+initial = "computed::LineWidthList::single(computed::BorderSideWidth::medium())"
+initial_specified_value = "specified::LineWidthList::single(specified::BorderSideWidth::medium())"
+struct = "column"
+servo_pref = "layout.css.columns.enabled"
+animation_type = "discrete"
+spec = "https://drafts.csswg.org/css-gaps-1/#propdef-row-rule-width"
+affects = "layout"
+
+[column-rule-break]
+type = "RuleBreak"
+initial = "computed::RuleBreak::Normal"
+struct = "column"
+servo_pref = "layout.css.gap-decorations.enabled"
+animation_type = "discrete"
+spec = "https://drafts.csswg.org/css-gaps-1/#propdef-column-rule-break"
+affects = "paint"
+
+[row-rule-break]
+type = "RuleBreak"
+initial = "computed::RuleBreak::Normal"
+struct = "column"
+servo_pref = "layout.css.gap-decorations.enabled"
+animation_type = "discrete"
+spec = "https://drafts.csswg.org/css-gaps-1/#propdef-row-rule-break"
+affects = "paint"
+
+[column-rule-visibility-items]
+type = "RuleVisibilityItems"
+initial = "computed::RuleVisibilityItems::Normal"
+struct = "column"
+servo_pref = "layout.css.gap-decorations.enabled"
+animation_type = "discrete"
+spec = "https://drafts.csswg.org/css-gaps-1/#propdef-column-rule-visibility-items"
+affects = "paint"
+
+[row-rule-visibility-items]
+type = "RuleVisibilityItems"
+initial = "computed::RuleVisibilityItems::Normal"
+struct = "column"
+servo_pref = "layout.css.gap-decorations.enabled"
+animation_type = "discrete"
+spec = "https://drafts.csswg.org/css-gaps-1/#propdef-row-rule-visibility-items"
+affects = "paint"
+
+[column-rule-inset-cap-start]
+type = "RuleInset"
+initial = "computed::RuleInset::zero()"
+initial_specified_value = "specified::RuleInset::zero()"
+struct = "column"
+servo_pref = "layout.css.gap-decorations.enabled"
+spec = "https://drafts.csswg.org/css-gaps-1/#propdef-column-rule-inset-cap-start"
+affects = "paint"
+
+[column-rule-inset-cap-end]
+type = "RuleInset"
+initial = "computed::RuleInset::zero()"
+initial_specified_value = "specified::RuleInset::zero()"
+struct = "column"
+servo_pref = "layout.css.gap-decorations.enabled"
+spec = "https://drafts.csswg.org/css-gaps-1/#propdef-column-rule-inset-cap-end"
+affects = "paint"
+
+[column-rule-inset-junction-start]
+type = "RuleInset"
+initial = "computed::RuleInset::zero()"
+initial_specified_value = "specified::RuleInset::zero()"
+struct = "column"
+servo_pref = "layout.css.gap-decorations.enabled"
+spec = "https://drafts.csswg.org/css-gaps-1/#propdef-column-rule-inset-junction-start"
+affects = "paint"
+
+[column-rule-inset-junction-end]
+type = "RuleInset"
+initial = "computed::RuleInset::zero()"
+initial_specified_value = "specified::RuleInset::zero()"
+struct = "column"
+servo_pref = "layout.css.gap-decorations.enabled"
+spec = "https://drafts.csswg.org/css-gaps-1/#propdef-column-rule-inset-junction-end"
+affects = "paint"
+
+[row-rule-inset-cap-start]
+type = "RuleInset"
+initial = "computed::RuleInset::zero()"
+initial_specified_value = "specified::RuleInset::zero()"
+struct = "column"
+servo_pref = "layout.css.gap-decorations.enabled"
+spec = "https://drafts.csswg.org/css-gaps-1/#propdef-row-rule-inset-cap-start"
+affects = "paint"
+
+[row-rule-inset-cap-end]
+type = "RuleInset"
+initial = "computed::RuleInset::zero()"
+initial_specified_value = "specified::RuleInset::zero()"
+struct = "column"
+servo_pref = "layout.css.gap-decorations.enabled"
+spec = "https://drafts.csswg.org/css-gaps-1/#propdef-row-rule-inset-cap-end"
+affects = "paint"
+
+[row-rule-inset-junction-start]
+type = "RuleInset"
+initial = "computed::RuleInset::zero()"
+initial_specified_value = "specified::RuleInset::zero()"
+struct = "column"
+servo_pref = "layout.css.gap-decorations.enabled"
+spec = "https://drafts.csswg.org/css-gaps-1/#propdef-row-rule-inset-junction-start"
+affects = "paint"
+
+[row-rule-inset-junction-end]
+type = "RuleInset"
+initial = "computed::RuleInset::zero()"
+initial_specified_value = "specified::RuleInset::zero()"
+struct = "column"
+servo_pref = "layout.css.gap-decorations.enabled"
+spec = "https://drafts.csswg.org/css-gaps-1/#propdef-row-rule-inset-junction-end"
+affects = "paint"
+
+[rule-overlap]
+type = "RuleOverlap"
+initial = "computed::RuleOverlap::RowOverColumn"
+struct = "column"
+servo_pref = "layout.css.gap-decorations.enabled"
+animation_type = "discrete"
+spec = "https://drafts.csswg.org/css-gaps-1/#propdef-rule-overlap"
+affects = "paint"
 
 [column-width]
 type = "length::NonNegativeLengthOrAuto"

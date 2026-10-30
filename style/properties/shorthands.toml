@@ -478,8 +478,132 @@ servo_pref = "layout.css.columns.enabled"
 [column-rule]
 servo_pref = "layout.css.columns.enabled"
 sub_properties = ["column-rule-width", "column-rule-style", "column-rule-color"]
-spec = "https://drafts.csswg.org/css-multicol/#propdef-column-rule"
-derive_serialize = true
+spec = "https://drafts.csswg.org/css-gaps-1/#propdef-column-rule"
+
+[row-rule]
+servo_pref = "layout.css.columns.enabled"
+sub_properties = ["row-rule-width", "row-rule-style", "row-rule-color"]
+spec = "https://drafts.csswg.org/css-gaps-1/#propdef-row-rule"
+
+[rule]
+servo_pref = "layout.css.columns.enabled"
+sub_properties = ["column-rule-width", "column-rule-style", "column-rule-color", "row-rule-width", "row-rule-style", "row-rule-color"]
+spec = "https://drafts.csswg.org/css-gaps-1/#propdef-rule"
+
+[rule-color]
+kind = "same_value"
+servo_pref = "layout.css.columns.enabled"
+sub_properties = ["column-rule-color", "row-rule-color"]
+spec = "https://drafts.csswg.org/css-gaps-1/#propdef-rule-color"
+
+[rule-style]
+kind = "same_value"
+servo_pref = "layout.css.columns.enabled"
+sub_properties = ["column-rule-style", "row-rule-style"]
+spec = "https://drafts.csswg.org/css-gaps-1/#propdef-rule-style"
+
+[rule-width]
+kind = "same_value"
+servo_pref = "layout.css.columns.enabled"
+sub_properties = ["column-rule-width", "row-rule-width"]
+spec = "https://drafts.csswg.org/css-gaps-1/#propdef-rule-width"
+
+[rule-break]
+kind = "same_value"
+servo_pref = "layout.css.gap-decorations.enabled"
+sub_properties = ["column-rule-break", "row-rule-break"]
+spec = "https://drafts.csswg.org/css-gaps-1/#propdef-rule-break"
+
+[rule-visibility-items]
+kind = "same_value"
+servo_pref = "layout.css.gap-decorations.enabled"
+sub_properties = ["column-rule-visibility-items", "row-rule-visibility-items"]
+spec = "https://drafts.csswg.org/css-gaps-1/#propdef-rule-visibility-items"
+
+[column-rule-inset-cap]
+kind = "two_properties"
+servo_pref = "layout.css.gap-decorations.enabled"
+sub_properties = ["column-rule-inset-cap-start", "column-rule-inset-cap-end"]
+spec = "https://drafts.csswg.org/css-gaps-1/#propdef-column-rule-inset-cap"
+
+[column-rule-inset-junction]
+kind = "two_properties"
+servo_pref = "layout.css.gap-decorations.enabled"
+sub_properties = ["column-rule-inset-junction-start", "column-rule-inset-junction-end"]
+spec = "https://drafts.csswg.org/css-gaps-1/#propdef-column-rule-inset-junction"
+
+[column-rule-inset-start]
+kind = "same_value"
+servo_pref = "layout.css.gap-decorations.enabled"
+sub_properties = ["column-rule-inset-cap-start", "column-rule-inset-junction-start"]
+spec = "https://drafts.csswg.org/css-gaps-1/#propdef-column-rule-inset-start"
+
+[column-rule-inset-end]
+kind = "same_value"
+servo_pref = "layout.css.gap-decorations.enabled"
+sub_properties = ["column-rule-inset-cap-end", "column-rule-inset-junction-end"]
+spec = "https://drafts.csswg.org/css-gaps-1/#propdef-column-rule-inset-end"
+
+[column-rule-inset]
+servo_pref = "layout.css.gap-decorations.enabled"
+sub_properties = ["column-rule-inset-cap-start", "column-rule-inset-cap-end", "column-rule-inset-junction-start", "column-rule-inset-junction-end"]
+spec = "https://drafts.csswg.org/css-gaps-1/#propdef-column-rule-inset"
+
+[row-rule-inset-cap]
+kind = "two_properties"
+servo_pref = "layout.css.gap-decorations.enabled"
+sub_properties = ["row-rule-inset-cap-start", "row-rule-inset-cap-end"]
+spec = "https://drafts.csswg.org/css-gaps-1/#propdef-row-rule-inset-cap"
+
+[row-rule-inset-junction]
+kind = "two_properties"
+servo_pref = "layout.css.gap-decorations.enabled"
+sub_properties = ["row-rule-inset-junction-start", "row-rule-inset-junction-end"]
+spec = "https://drafts.csswg.org/css-gaps-1/#propdef-row-rule-inset-junction"
+
+[row-rule-inset-start]
+kind = "same_value"
+servo_pref = "layout.css.gap-decorations.enabled"
+sub_properties = ["row-rule-inset-cap-start", "row-rule-inset-junction-start"]
+spec = "https://drafts.csswg.org/css-gaps-1/#propdef-row-rule-inset-start"
+
+[row-rule-inset-end]
+kind = "same_value"
+servo_pref = "layout.css.gap-decorations.enabled"
+sub_properties = ["row-rule-inset-cap-end", "row-rule-inset-junction-end"]
+spec = "https://drafts.csswg.org/css-gaps-1/#propdef-row-rule-inset-end"
+
+[row-rule-inset]
+servo_pref = "layout.css.gap-decorations.enabled"
+sub_properties = ["row-rule-inset-cap-start", "row-rule-inset-cap-end", "row-rule-inset-junction-start", "row-rule-inset-junction-end"]
+spec = "https://drafts.csswg.org/css-gaps-1/#propdef-row-rule-inset"
+
+[rule-inset]
+servo_pref = "layout.css.gap-decorations.enabled"
+sub_properties = ["column-rule-inset-cap-start", "column-rule-inset-cap-end", "column-rule-inset-junction-start", "column-rule-inset-junction-end", "row-rule-inset-cap-start", "row-rule-inset-cap-end", "row-rule-inset-junction-start", "row-rule-inset-junction-end"]
+spec = "https://drafts.csswg.org/css-gaps-1/#propdef-rule-inset"
+
+[rule-inset-cap]
+servo_pref = "layout.css.gap-decorations.enabled"
+sub_properties = ["column-rule-inset-cap-start", "column-rule-inset-cap-end", "row-rule-inset-cap-start", "row-rule-inset-cap-end"]
+spec = "https://drafts.csswg.org/css-gaps-1/#propdef-rule-inset-cap"
+
+[rule-inset-junction]
+servo_pref = "layout.css.gap-decorations.enabled"
+sub_properties = ["column-rule-inset-junction-start", "column-rule-inset-junction-end", "row-rule-inset-junction-start", "row-rule-inset-junction-end"]
+spec = "https://drafts.csswg.org/css-gaps-1/#propdef-rule-inset-junction"
+
+[rule-inset-start]
+kind = "same_value"
+servo_pref = "layout.css.gap-decorations.enabled"
+sub_properties = ["column-rule-inset-cap-start", "column-rule-inset-junction-start", "row-rule-inset-cap-start", "row-rule-inset-junction-start"]
+spec = "https://drafts.csswg.org/css-gaps-1/#propdef-rule-inset-start"
+
+[rule-inset-end]
+kind = "same_value"
+servo_pref = "layout.css.gap-decorations.enabled"
+sub_properties = ["column-rule-inset-cap-end", "column-rule-inset-junction-end", "row-rule-inset-cap-end", "row-rule-inset-junction-end"]
+spec = "https://drafts.csswg.org/css-gaps-1/#propdef-rule-inset-end"
 
 [text-decoration]
 sub_properties = ["text-decoration-color", "text-decoration-line", "text-decoration-style", "text-decoration-thickness"]

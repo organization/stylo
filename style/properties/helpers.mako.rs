@@ -610,6 +610,9 @@ pub mod ${property.ident} {
         % if shorthand.kind == "two_properties":
         ${self.two_properties_shorthand(shorthand)}
         % endif
+        % if shorthand.kind == "same_value":
+        ${self.same_value_shorthand(shorthand)}
+        % endif
         % if shorthand.kind == "four_sides":
         ${self.four_sides_shorthand(shorthand)}
         % endif
@@ -651,6 +654,36 @@ pub mod ${property.ident} {
                 second.to_css(dest)?;
             }
             Ok(())
+        }
+    }
+</%def>
+
+// A shorthand that sets all of its longhands, which have the same type, to
+// the same value.
+<%def name="same_value_shorthand(shorthand)">
+    type Single = crate::properties::longhands::${shorthand.sub_properties[0].ident}::SpecifiedValue;
+
+    fn parse_value(
+        context: &ParserContext,
+        input: &mut Parser,
+    ) -> Result<Longhands, ParseError> {
+        let value = <Single as crate::parser::Parse>::parse(context, input)?;
+        Ok(crate::properties::shorthands::expanded! {
+            % for sub_property in shorthand.sub_properties:
+            ${sub_property.ident}: value.clone(),
+            % endfor
+        })
+    }
+
+    impl<'a> ToCss for LonghandsToSerialize<'a>  {
+        fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result where W: fmt::Write {
+            let value = &self.${shorthand.sub_properties[0].ident};
+            % for sub_property in shorthand.sub_properties[1:]:
+            if self.${sub_property.ident} != *value {
+                return Ok(());
+            }
+            % endfor
+            value.to_css(dest)
         }
     }
 </%def>

@@ -808,37 +808,487 @@ pub mod columns {
     }
 }
 
-pub mod column_rule {
-    pub use crate::properties::generated::shorthands::column_rule::*;
+/// A `<gap-rule>`: a line width, style and color in any order.
+struct GapRule {
+    width: specified::BorderSideWidth,
+    style: specified::BorderStyle,
+    color: specified::Color,
+}
 
-    use super::*;
-    use crate::properties::longhands::column_rule_color;
-    use crate::properties::longhands::{column_rule_style, column_rule_width};
-
-    pub fn parse_value(
-        context: &ParserContext,
-        input: &mut Parser,
-    ) -> Result<Longhands, ParseError> {
-        let mut column_rule_width = None;
-        let mut column_rule_style = None;
-        let mut column_rule_color = None;
+impl Parse for GapRule {
+    fn parse(context: &ParserContext, input: &mut Parser) -> Result<Self, ParseError> {
+        let mut width = None;
+        let mut style = None;
+        let mut color = None;
         let mut parsed = 0;
         loop {
             parsed += 1;
-            try_parse_one!(context, input, column_rule_width, column_rule_width::parse);
-            try_parse_one!(context, input, column_rule_style, column_rule_style::parse);
-            try_parse_one!(context, input, column_rule_color, column_rule_color::parse);
+            try_parse_one!(context, input, width, specified::BorderSideWidth::parse);
+            try_parse_one!(input, style, specified::BorderStyle::parse);
+            try_parse_one!(context, input, color, specified::Color::parse);
             parsed -= 1;
             break;
         }
         if parsed == 0 {
             return Err(ParseError::custom(StyleParseErrorKind::UnspecifiedError));
         }
-        Ok(expanded! {
-            column_rule_width: unwrap_or_initial!(column_rule_width),
-            column_rule_style: unwrap_or_initial!(column_rule_style),
-            column_rule_color: unwrap_or_initial!(column_rule_color),
+        Ok(Self {
+            width: width.unwrap_or_else(specified::BorderSideWidth::medium),
+            style: style.unwrap_or(specified::BorderStyle::None),
+            color: color.unwrap_or_else(specified::Color::currentcolor),
         })
+    }
+}
+
+/// Parses a `<gap-rule-list> | <gap-auto-rule-list>` into width, style and
+/// color lists.
+fn parse_gap_rule_list(
+    context: &ParserContext,
+    input: &mut Parser,
+) -> Result<
+    (
+        specified::LineWidthList,
+        specified::LineStyleList,
+        specified::LineColorList,
+    ),
+    ParseError,
+> {
+    let rules = specified::column::GapRuleList::<GapRule>::parse(context, input)?;
+    Ok((
+        rules.map(|rule| rule.width.clone()),
+        rules.map(|rule| rule.style),
+        rules.map(|rule| rule.color.clone()),
+    ))
+}
+
+fn serialize_gap_rule<W>(
+    dest: &mut CssWriter<W>,
+    width: &specified::BorderSideWidth,
+    style: &specified::BorderStyle,
+    color: &specified::Color,
+) -> fmt::Result
+where
+    W: Write,
+{
+    let has_style = *style != specified::BorderStyle::None;
+    let has_color = !matches!(*color, specified::Color::CurrentColor);
+    let mut writer = SequenceWriter::new(dest, " ");
+    if *width != specified::BorderSideWidth::medium() || (!has_style && !has_color) {
+        writer.item(width)?;
+    }
+    if has_style {
+        writer.item(style)?;
+    }
+    if has_color {
+        writer.item(color)?;
+    }
+    Ok(())
+}
+
+/// Serializes the width, style and color lists of a rule shorthand, or
+/// nothing if the lists do not have the same shape.
+fn serialize_gap_rule_list<W>(
+    dest: &mut CssWriter<W>,
+    width: &specified::LineWidthList,
+    style: &specified::LineStyleList,
+    color: &specified::LineColorList,
+) -> fmt::Result
+where
+    W: Write,
+{
+    use crate::values::generics::column::GapRuleItem;
+
+    if width.0.len() != style.0.len() || width.0.len() != color.0.len() {
+        return Ok(());
+    }
+    let items = || width.0.iter().zip(style.0.iter()).zip(color.0.iter());
+    let same_shape = items().all(|((width, style), color)| match (width, style, color) {
+        (GapRuleItem::Value(_), GapRuleItem::Value(_), GapRuleItem::Value(_)) => true,
+        (GapRuleItem::Repeat(width), GapRuleItem::Repeat(style), GapRuleItem::Repeat(color)) => {
+            width.count == style.count
+                && width.count == color.count
+                && width.values.len() == style.values.len()
+                && width.values.len() == color.values.len()
+        },
+        _ => false,
+    });
+    if !same_shape {
+        return Ok(());
+    }
+    for (i, ((width, style), color)) in items().enumerate() {
+        if i != 0 {
+            dest.write_str(", ")?;
+        }
+        match (width, style, color) {
+            (GapRuleItem::Value(width), GapRuleItem::Value(style), GapRuleItem::Value(color)) => {
+                serialize_gap_rule(dest, width, style, color)?;
+            },
+            (
+                GapRuleItem::Repeat(width),
+                GapRuleItem::Repeat(style),
+                GapRuleItem::Repeat(color),
+            ) => {
+                dest.write_str("repeat(")?;
+                width.count.to_css(dest)?;
+                for ((width, style), color) in width
+                    .values
+                    .iter()
+                    .zip(style.values.iter())
+                    .zip(color.values.iter())
+                {
+                    dest.write_str(", ")?;
+                    serialize_gap_rule(dest, width, style, color)?;
+                }
+                dest.write_char(')')?;
+            },
+            _ => unreachable!(),
+        }
+    }
+    Ok(())
+}
+
+pub mod column_rule {
+    pub use crate::properties::generated::shorthands::column_rule::*;
+
+    use super::*;
+
+    pub fn parse_value(
+        context: &ParserContext,
+        input: &mut Parser,
+    ) -> Result<Longhands, ParseError> {
+        let (width, style, color) = parse_gap_rule_list(context, input)?;
+        Ok(expanded! {
+            column_rule_width: width,
+            column_rule_style: style,
+            column_rule_color: color,
+        })
+    }
+
+    impl<'a> ToCss for LonghandsToSerialize<'a> {
+        fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
+        where
+            W: fmt::Write,
+        {
+            serialize_gap_rule_list(
+                dest,
+                self.column_rule_width,
+                self.column_rule_style,
+                self.column_rule_color,
+            )
+        }
+    }
+}
+
+pub mod row_rule {
+    pub use crate::properties::generated::shorthands::row_rule::*;
+
+    use super::*;
+
+    pub fn parse_value(
+        context: &ParserContext,
+        input: &mut Parser,
+    ) -> Result<Longhands, ParseError> {
+        let (width, style, color) = parse_gap_rule_list(context, input)?;
+        Ok(expanded! {
+            row_rule_width: width,
+            row_rule_style: style,
+            row_rule_color: color,
+        })
+    }
+
+    impl<'a> ToCss for LonghandsToSerialize<'a> {
+        fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
+        where
+            W: fmt::Write,
+        {
+            serialize_gap_rule_list(
+                dest,
+                self.row_rule_width,
+                self.row_rule_style,
+                self.row_rule_color,
+            )
+        }
+    }
+}
+
+pub mod rule {
+    pub use crate::properties::generated::shorthands::rule::*;
+
+    use super::*;
+
+    pub fn parse_value(
+        context: &ParserContext,
+        input: &mut Parser,
+    ) -> Result<Longhands, ParseError> {
+        let (width, style, color) = parse_gap_rule_list(context, input)?;
+        Ok(expanded! {
+            column_rule_width: width.clone(),
+            column_rule_style: style.clone(),
+            column_rule_color: color.clone(),
+            row_rule_width: width,
+            row_rule_style: style,
+            row_rule_color: color,
+        })
+    }
+
+    impl<'a> ToCss for LonghandsToSerialize<'a> {
+        fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
+        where
+            W: fmt::Write,
+        {
+            if self.column_rule_width != self.row_rule_width
+                || self.column_rule_style != self.row_rule_style
+                || self.column_rule_color != self.row_rule_color
+            {
+                return Ok(());
+            }
+            serialize_gap_rule_list(
+                dest,
+                self.column_rule_width,
+                self.column_rule_style,
+                self.column_rule_color,
+            )
+        }
+    }
+}
+
+/// Parses `<inset-value> <inset-value>? [ / <inset-value> <inset-value>? ]?`
+/// into cap start, cap end, junction start and junction end values.
+fn parse_rule_inset(
+    context: &ParserContext,
+    input: &mut Parser,
+) -> Result<[specified::RuleInset; 4], ParseError> {
+    let cap_start = specified::RuleInset::parse(context, input)?;
+    let cap_end = input
+        .try_parse(|i| specified::RuleInset::parse(context, i))
+        .unwrap_or_else(|_| cap_start.clone());
+    if input.try_parse(|i| i.expect_delim('/')).is_err() {
+        return Ok([cap_start.clone(), cap_end.clone(), cap_start, cap_end]);
+    }
+    let junction_start = specified::RuleInset::parse(context, input)?;
+    let junction_end = input
+        .try_parse(|i| specified::RuleInset::parse(context, i))
+        .unwrap_or_else(|_| junction_start.clone());
+    Ok([cap_start, cap_end, junction_start, junction_end])
+}
+
+fn serialize_rule_inset<W>(
+    dest: &mut CssWriter<W>,
+    values: [&specified::RuleInset; 4],
+) -> fmt::Result
+where
+    W: Write,
+{
+    values[0].to_css(dest)?;
+    if values[1..].iter().all(|value| *value == values[0]) {
+        return Ok(());
+    }
+    dest.write_char(' ')?;
+    values[1].to_css(dest)?;
+    dest.write_str(" / ")?;
+    values[2].to_css(dest)?;
+    dest.write_char(' ')?;
+    values[3].to_css(dest)
+}
+
+pub mod column_rule_inset {
+    pub use crate::properties::generated::shorthands::column_rule_inset::*;
+
+    use super::*;
+
+    pub fn parse_value(
+        context: &ParserContext,
+        input: &mut Parser,
+    ) -> Result<Longhands, ParseError> {
+        let [cap_start, cap_end, junction_start, junction_end] = parse_rule_inset(context, input)?;
+        Ok(expanded! {
+            column_rule_inset_cap_start: cap_start,
+            column_rule_inset_cap_end: cap_end,
+            column_rule_inset_junction_start: junction_start,
+            column_rule_inset_junction_end: junction_end,
+        })
+    }
+
+    impl<'a> ToCss for LonghandsToSerialize<'a> {
+        fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
+        where
+            W: fmt::Write,
+        {
+            serialize_rule_inset(
+                dest,
+                [
+                    self.column_rule_inset_cap_start,
+                    self.column_rule_inset_cap_end,
+                    self.column_rule_inset_junction_start,
+                    self.column_rule_inset_junction_end,
+                ],
+            )
+        }
+    }
+}
+pub mod row_rule_inset {
+    pub use crate::properties::generated::shorthands::row_rule_inset::*;
+
+    use super::*;
+
+    pub fn parse_value(
+        context: &ParserContext,
+        input: &mut Parser,
+    ) -> Result<Longhands, ParseError> {
+        let [cap_start, cap_end, junction_start, junction_end] = parse_rule_inset(context, input)?;
+        Ok(expanded! {
+            row_rule_inset_cap_start: cap_start,
+            row_rule_inset_cap_end: cap_end,
+            row_rule_inset_junction_start: junction_start,
+            row_rule_inset_junction_end: junction_end,
+        })
+    }
+
+    impl<'a> ToCss for LonghandsToSerialize<'a> {
+        fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
+        where
+            W: fmt::Write,
+        {
+            serialize_rule_inset(
+                dest,
+                [
+                    self.row_rule_inset_cap_start,
+                    self.row_rule_inset_cap_end,
+                    self.row_rule_inset_junction_start,
+                    self.row_rule_inset_junction_end,
+                ],
+            )
+        }
+    }
+}
+pub mod rule_inset {
+    pub use crate::properties::generated::shorthands::rule_inset::*;
+
+    use super::*;
+
+    pub fn parse_value(
+        context: &ParserContext,
+        input: &mut Parser,
+    ) -> Result<Longhands, ParseError> {
+        let [cap_start, cap_end, junction_start, junction_end] = parse_rule_inset(context, input)?;
+        Ok(expanded! {
+            column_rule_inset_cap_start: cap_start.clone(),
+            column_rule_inset_cap_end: cap_end.clone(),
+            column_rule_inset_junction_start: junction_start.clone(),
+            column_rule_inset_junction_end: junction_end.clone(),
+            row_rule_inset_cap_start: cap_start,
+            row_rule_inset_cap_end: cap_end,
+            row_rule_inset_junction_start: junction_start,
+            row_rule_inset_junction_end: junction_end,
+        })
+    }
+
+    impl<'a> ToCss for LonghandsToSerialize<'a> {
+        fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
+        where
+            W: fmt::Write,
+        {
+            let column = [
+                self.column_rule_inset_cap_start,
+                self.column_rule_inset_cap_end,
+                self.column_rule_inset_junction_start,
+                self.column_rule_inset_junction_end,
+            ];
+            let row = [
+                self.row_rule_inset_cap_start,
+                self.row_rule_inset_cap_end,
+                self.row_rule_inset_junction_start,
+                self.row_rule_inset_junction_end,
+            ];
+            if column != row {
+                return Ok(());
+            }
+            serialize_rule_inset(dest, column)
+        }
+    }
+}
+
+pub mod rule_inset_cap {
+    pub use crate::properties::generated::shorthands::rule_inset_cap::*;
+
+    use super::*;
+
+    pub fn parse_value(
+        context: &ParserContext,
+        input: &mut Parser,
+    ) -> Result<Longhands, ParseError> {
+        let start = specified::RuleInset::parse(context, input)?;
+        let end = input
+            .try_parse(|i| specified::RuleInset::parse(context, i))
+            .unwrap_or_else(|_| start.clone());
+        Ok(expanded! {
+            column_rule_inset_cap_start: start.clone(),
+            column_rule_inset_cap_end: end.clone(),
+            row_rule_inset_cap_start: start,
+            row_rule_inset_cap_end: end,
+        })
+    }
+
+    impl<'a> ToCss for LonghandsToSerialize<'a> {
+        fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
+        where
+            W: fmt::Write,
+        {
+            let start = self.column_rule_inset_cap_start;
+            let end = self.column_rule_inset_cap_end;
+            if start != self.row_rule_inset_cap_start || end != self.row_rule_inset_cap_end {
+                return Ok(());
+            }
+            start.to_css(dest)?;
+            if start != end {
+                dest.write_char(' ')?;
+                end.to_css(dest)?;
+            }
+            Ok(())
+        }
+    }
+}
+
+pub mod rule_inset_junction {
+    pub use crate::properties::generated::shorthands::rule_inset_junction::*;
+
+    use super::*;
+
+    pub fn parse_value(
+        context: &ParserContext,
+        input: &mut Parser,
+    ) -> Result<Longhands, ParseError> {
+        let start = specified::RuleInset::parse(context, input)?;
+        let end = input
+            .try_parse(|i| specified::RuleInset::parse(context, i))
+            .unwrap_or_else(|_| start.clone());
+        Ok(expanded! {
+            column_rule_inset_junction_start: start.clone(),
+            column_rule_inset_junction_end: end.clone(),
+            row_rule_inset_junction_start: start,
+            row_rule_inset_junction_end: end,
+        })
+    }
+
+    impl<'a> ToCss for LonghandsToSerialize<'a> {
+        fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
+        where
+            W: fmt::Write,
+        {
+            let start = self.column_rule_inset_junction_start;
+            let end = self.column_rule_inset_junction_end;
+            if start != self.row_rule_inset_junction_start
+                || end != self.row_rule_inset_junction_end
+            {
+                return Ok(());
+            }
+            start.to_css(dest)?;
+            if start != end {
+                dest.write_char(' ')?;
+                end.to_css(dest)?;
+            }
+            Ok(())
+        }
     }
 }
 
