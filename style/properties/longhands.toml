@@ -1290,6 +1290,16 @@ spec = "https://drafts.csswg.org/css-images/#propdef-image-rendering"
 animation_type = "discrete"
 affects = "paint"
 
+[image-resolution]
+type = "ImageResolution"
+initial = "computed::ImageResolution::from_resolution(computed::Resolution::from_dppx(1.))"
+initial_specified_value = "specified::ImageResolution::from_resolution(specified::Resolution::from_dppx(1.))"
+struct = "inherited_box"
+engine = "servo"
+animation_type = "discrete"
+spec = "https://drafts.csswg.org/css-images-4/#the-image-resolution"
+affects = "layout"
+
 [-moz-image-decoding]
 type = "ImageDecoding"
 initial = "specified::ImageDecoding::Auto"

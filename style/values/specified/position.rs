@@ -2177,7 +2177,6 @@ pub enum BoxSizing {
     FromPrimitive,
     Hash,
     MallocSizeOf,
-    Parse,
     PartialEq,
     Serialize,
     SpecifiedValueInfo,
@@ -2194,4 +2193,41 @@ pub enum ObjectFit {
     Cover,
     None,
     ScaleDown,
+    /// `cover scale-down`. `contain scale-down` is the same as `scale-down`.
+    /// <https://drafts.csswg.org/css-images-4/#the-object-fit>
+    #[css(keyword = "cover scale-down")]
+    CoverScaleDown,
+}
+
+impl Parse for ObjectFit {
+    fn parse<'i>(_: &ParserContext, input: &mut Parser<'i>) -> Result<Self, ParseError> {
+        let scale_down = |input: &mut Parser<'i>| {
+            input.try_parse(|i| i.expect_ident_matching("scale-down")).is_ok()
+        };
+        let ident = input.expect_ident()?.clone();
+        let fit = cssparser::match_ignore_ascii_case! { &ident,
+            "fill" => return Ok(ObjectFit::Fill),
+            "none" => return Ok(ObjectFit::None),
+            "contain" => ObjectFit::Contain,
+            "cover" => ObjectFit::Cover,
+            "scale-down" => {
+                if input.try_parse(|i| i.expect_ident_matching("contain")).is_ok() {
+                    return Ok(ObjectFit::ScaleDown);
+                }
+                if input.try_parse(|i| i.expect_ident_matching("cover")).is_ok() {
+                    return Ok(ObjectFit::CoverScaleDown);
+                }
+                return Ok(ObjectFit::ScaleDown);
+            },
+            _ => return Err(ParseError::custom(StyleParseErrorKind::UnspecifiedError)),
+        };
+        if !scale_down(input) {
+            return Ok(fit);
+        }
+        Ok(if fit == ObjectFit::Cover {
+            ObjectFit::CoverScaleDown
+        } else {
+            ObjectFit::ScaleDown
+        })
+    }
 }

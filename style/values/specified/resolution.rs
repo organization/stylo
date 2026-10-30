@@ -213,6 +213,22 @@ impl ToComputedValue for Resolution {
     }
 }
 
+impl Resolution {
+    /// Parses a resolution that may be negative, as `image-resolution` allows.
+    pub fn parse_any_sign(context: &ParserContext, input: &mut Parser) -> Result<Self, ParseError> {
+        if let Ok(resolution) = input.try_parse(|i| match *i.next()? {
+            Token::Dimension {
+                value, ref unit, ..
+            } if value < 0. => Self::parse_dimension(value, unit)
+                .map_err(|()| ParseError::custom(StyleParseErrorKind::UnspecifiedError)),
+            _ => Err(ParseError::custom(StyleParseErrorKind::UnspecifiedError)),
+        }) {
+            return Ok(resolution);
+        }
+        Self::parse(context, input)
+    }
+}
+
 impl Parse for Resolution {
     fn parse(context: &ParserContext, input: &mut Parser) -> Result<Self, ParseError> {
         match *input.next()? {

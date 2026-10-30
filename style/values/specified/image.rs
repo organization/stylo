@@ -1330,8 +1330,8 @@ impl PaintWorklet {
 #[repr(u8)]
 pub enum ImageRendering {
     Auto,
-    #[cfg(feature = "gecko")]
     Smooth,
+    HighQuality,
     #[parse(aliases = "-moz-crisp-edges")]
     CrispEdges,
     Pixelated,
@@ -1343,9 +1343,7 @@ pub enum ImageRendering {
     //     as crisp-edges and smooth respectively, and authors must not use
     //     them.
     //
-    #[cfg(feature = "gecko")]
     Optimizespeed,
-    #[cfg(feature = "gecko")]
     Optimizequality,
 }
 
@@ -1374,4 +1372,109 @@ pub enum ImageDecoding {
     Auto,
     /// Force sync-decoding.
     Sync,
+}
+
+/// An item of the `image-resolution` property.
+#[allow(missing_docs)]
+#[derive(
+    Clone,
+    Debug,
+    MallocSizeOf,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToComputedValue,
+    ToCss,
+    ToResolvedValue,
+    ToShmem,
+)]
+#[repr(C, u8)]
+pub enum GenericImageResolutionItem<Resolution> {
+    FromImage,
+    Snap,
+    Resolution(Resolution),
+}
+
+/// The `image-resolution` property: `[ from-image || <resolution> ] && snap?`,
+/// which keeps the parts in the order they were written.
+/// <https://drafts.csswg.org/css-images-4/#the-image-resolution>
+#[derive(
+    Clone,
+    Debug,
+    MallocSizeOf,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToComputedValue,
+    ToResolvedValue,
+    ToShmem,
+)]
+#[repr(C)]
+pub struct GenericImageResolution<Resolution>(
+    pub crate::OwnedSlice<GenericImageResolutionItem<Resolution>>,
+);
+
+impl<R: ToCss> ToCss for GenericImageResolution<R> {
+    fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
+    where
+        W: Write,
+    {
+        let mut writer = style_traits::values::SequenceWriter::new(dest, " ");
+        for item in self.0.iter() {
+            writer.item(item)?;
+        }
+        Ok(())
+    }
+}
+
+impl<R> crate::typed_om::ToTyped for GenericImageResolution<R> {}
+
+/// A specified value for the `image-resolution` property.
+pub type ImageResolution = GenericImageResolution<crate::values::specified::Resolution>;
+
+impl<R> GenericImageResolution<R> {
+    /// Returns a value made of a single resolution.
+    pub fn from_resolution(resolution: R) -> Self {
+        Self(vec![GenericImageResolutionItem::Resolution(resolution)].into())
+    }
+}
+
+impl Parse for ImageResolution {
+    fn parse<'i>(context: &ParserContext, input: &mut Parser<'i>) -> Result<Self, ParseError> {
+        let snap =
+            |input: &mut Parser<'i>| input.try_parse(|i| i.expect_ident_matching("snap")).is_ok();
+        let mut items = Vec::new();
+        let snap_first = snap(input);
+        if snap_first {
+            items.push(GenericImageResolutionItem::Snap);
+        }
+        let mut from_image = false;
+        let mut resolution = false;
+        loop {
+            if !from_image
+                && input
+                    .try_parse(|i| i.expect_ident_matching("from-image"))
+                    .is_ok()
+            {
+                from_image = true;
+                items.push(GenericImageResolutionItem::FromImage);
+                continue;
+            }
+            if !resolution {
+                if let Ok(value) = input
+                    .try_parse(|i| crate::values::specified::Resolution::parse_any_sign(context, i))
+                {
+                    resolution = true;
+                    items.push(GenericImageResolutionItem::Resolution(value));
+                    continue;
+                }
+            }
+            break;
+        }
+        if !from_image && !resolution {
+            return Err(ParseError::custom(StyleParseErrorKind::UnspecifiedError));
+        }
+        if !snap_first && snap(input) {
+            items.push(GenericImageResolutionItem::Snap);
+        }
+        Ok(Self(items.into()))
+    }
 }

@@ -27,6 +27,10 @@ use thin_vec::ThinVec;
 
 pub use specified::{ImageDecoding, ImageRendering};
 
+/// A computed value for the `image-resolution` property.
+pub type ImageResolution =
+    crate::values::specified::image::GenericImageResolution<crate::values::computed::Resolution>;
+
 /// Computed values for an image according to CSS-IMAGES.
 /// <https://drafts.csswg.org/css-images/#image-values>
 pub type Image = generic::GenericImage<Gradient, ComputedUrl, Color, Percentage, Resolution>;
