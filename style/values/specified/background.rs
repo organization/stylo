@@ -165,6 +165,11 @@ fn background_clip_border_area_enabled(context: &ParserContext) -> bool {
     context.chrome_rules_enabled() || crate::pref!("layout.css.background-clip.border-area.enabled")
 }
 
+// The combined `border-area text` value is parsed by `parse_for_background`.
+fn parse_as_single_keyword(_: &ParserContext) -> bool {
+    false
+}
+
 /// The specified value of the `background-clip` and `mask-clip` properties.
 ///
 /// This is the union of the keywords both properties accept; each property restricts the set it
@@ -209,6 +214,11 @@ pub enum BackgroundClip {
     #[parse(condition = "background_clip_border_area_enabled")]
     #[value_info(skip)]
     BorderArea,
+    /// `border-area text`, which backgrounds-4 allows together.
+    #[css(keyword = "border-area text")]
+    #[parse(condition = "parse_as_single_keyword")]
+    #[value_info(skip)]
+    BorderAreaText,
 }
 
 bitflags! {
@@ -233,6 +243,7 @@ impl BackgroundClip {
             Self::NoClip => ClipValidity::MASK,
             Self::Text => ClipValidity::BACKGROUND,
             Self::BorderArea => ClipValidity::BACKGROUND,
+            Self::BorderAreaText => ClipValidity::BACKGROUND,
         }
     }
 
@@ -244,6 +255,18 @@ impl BackgroundClip {
         let clip = Self::parse(context, input)?;
         if !clip.validity().intersects(ClipValidity::BACKGROUND) {
             return Err(ParseError::custom(StyleParseErrorKind::UnspecifiedError));
+        }
+        let other = match clip {
+            Self::BorderArea => Self::Text,
+            Self::Text if background_clip_border_area_enabled(context) => Self::BorderArea,
+            _ => return Ok(clip),
+        };
+        let combined = input.try_parse(|i| match Self::parse(context, i) {
+            Ok(next) if next == other => Ok(()),
+            _ => Err(ParseError::custom(StyleParseErrorKind::UnspecifiedError)),
+        });
+        if combined.is_ok() {
+            return Ok(Self::BorderAreaText);
         }
         Ok(clip)
     }
