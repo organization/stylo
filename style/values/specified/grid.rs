@@ -129,6 +129,10 @@ pub fn parse_line_names(input: &mut Parser) -> Result<crate::OwnedSlice<CustomId
 enum RepeatType {
     /// [`<auto-repeat>`](https://drafts.csswg.org/css-grid/#typedef-auto-repeat)
     Auto,
+    /// An `<auto-repeat>` of intrinsic track sizes, which must be the whole
+    /// track list.
+    /// <https://github.com/w3c/csswg-drafts/issues/9321>
+    AutoIntrinsic,
     /// [`<track-repeat>`](https://drafts.csswg.org/css-grid/#typedef-track-repeat)
     Normal,
     /// [`<fixed-repeat>`](https://drafts.csswg.org/css-grid/#typedef-fixed-repeat)
@@ -164,13 +168,8 @@ impl TrackRepeat<LengthPercentage, Integer> {
                         if let Ok(track_size) = input.try_parse(|i| TrackSize::parse(context, i)) {
                             if !track_size.is_fixed() {
                                 if is_auto {
-                                    // should be <fixed-size> for <auto-repeat>
-                                    return Err(ParseError::custom(
-                                        StyleParseErrorKind::UnspecifiedError,
-                                    ));
-                                }
-
-                                if repeat_type == RepeatType::Fixed {
+                                    repeat_type = RepeatType::AutoIntrinsic;
+                                } else if repeat_type == RepeatType::Fixed {
                                     repeat_type = RepeatType::Normal // <track-size> for sure
                                 }
                             }
@@ -242,6 +241,20 @@ impl Parse for TrackList<LengthPercentage, Integer> {
                             return Err(ParseError::custom(StyleParseErrorKind::UnspecifiedError));
                         }
                         auto_repeat_index = Some(values.len());
+                    },
+                    RepeatType::AutoIntrinsic => {
+                        if !values.is_empty() {
+                            return Err(ParseError::custom(StyleParseErrorKind::UnspecifiedError));
+                        }
+                        let vec = std::mem::take(&mut current_names);
+                        names.push(vec.into());
+                        values.push(TrackListValue::TrackRepeat(repeat));
+                        names.push(input.try_parse(parse_line_names).unwrap_or_default().into());
+                        return Ok(TrackList {
+                            auto_repeat_index: 0,
+                            values: values.into(),
+                            line_names: names.into(),
+                        });
                     },
                     RepeatType::Fixed => {},
                 }
