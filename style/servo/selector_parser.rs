@@ -79,10 +79,76 @@ pub enum PseudoElement {
     ViewTransitionImagePair(PtNameAndClassSelector),
     ViewTransitionOld(PtNameAndClassSelector),
     ViewTransitionNew(PtNameAndClassSelector),
+
+    // Pseudo-elements that are parsed but never generated.
+    TargetText,
+    SpellingError,
+    GrammarError,
+    SearchText,
+    Picker,
+    PickerIcon,
+    Checkmark,
+    ScrollMarker,
+    ScrollMarkerGroup,
+    ScrollButton(ScrollButtonDirection),
+    Column,
+}
+
+/// The argument of `::scroll-button()`.
+///
+/// <https://drafts.csswg.org/css-overflow-5/#scroll-buttons>
+#[derive(
+    Clone, Copy, Debug, Deserialize, Eq, Hash, MallocSizeOf, PartialEq, Serialize, ToShmem,
+)]
+#[allow(missing_docs)]
+pub enum ScrollButtonDirection {
+    Any,
+    Up,
+    Down,
+    Left,
+    Right,
+    BlockStart,
+    BlockEnd,
+    InlineStart,
+    InlineEnd,
+}
+
+impl ScrollButtonDirection {
+    fn parse<'i>(input: &mut CssParser<'i>) -> Result<Self, ParseError> {
+        if input.try_parse(|i| i.expect_delim('*')).is_ok() {
+            return Ok(Self::Any);
+        }
+        let ident = input.expect_ident()?;
+        Ok(match_ignore_ascii_case! { &ident,
+            "up" => Self::Up,
+            "down" => Self::Down,
+            "left" => Self::Left,
+            "right" => Self::Right,
+            "block-start" => Self::BlockStart,
+            "block-end" => Self::BlockEnd,
+            "inline-start" => Self::InlineStart,
+            "inline-end" => Self::InlineEnd,
+            _ => return Err(ParseError::custom(SelectorParseErrorKind::UnexpectedIdent)),
+        })
+    }
+
+    fn as_str(&self) -> &'static str {
+        match *self {
+            Self::Any => "*",
+            Self::Up => "up",
+            Self::Down => "down",
+            Self::Left => "left",
+            Self::Right => "right",
+            Self::BlockStart => "block-start",
+            Self::BlockEnd => "block-end",
+            Self::InlineStart => "inline-start",
+            Self::InlineEnd => "inline-end",
+        }
+    }
 }
 
 /// The count of all pseudo-elements.
-pub const PSEUDO_COUNT: usize = 26;
+pub const PSEUDO_COUNT: usize = 37;
 
 /// The argument of the view transition pseudo-elements, interned so that
 /// [`PseudoElement`] stays `Copy`.
@@ -210,13 +276,53 @@ impl ToCss for PseudoElement {
                 argument.to_css(dest)?;
                 return dest.write_char(')');
             },
+            TargetText => "::target-text",
+            SpellingError => "::spelling-error",
+            GrammarError => "::grammar-error",
+            SearchText => "::search-text",
+            Picker => "::picker(select)",
+            PickerIcon => "::picker-icon",
+            Checkmark => "::checkmark",
+            ScrollMarker => "::scroll-marker",
+            ScrollMarkerGroup => "::scroll-marker-group",
+            ScrollButton(direction) => {
+                dest.write_str("::scroll-button(")?;
+                dest.write_str(direction.as_str())?;
+                return dest.write_char(')');
+            },
+            Column => "::column",
         })
     }
 }
 
 impl ::selectors::parser::PseudoElement for PseudoElement {
     fn parses_as_element_backed(&self) -> bool {
-        matches!(self, Self::DetailsContent) || self.has_argument()
+        matches!(self, Self::DetailsContent | Self::Picker | Self::ScrollButton(..)) ||
+            self.has_argument()
+    }
+
+    fn valid_after_slotted(&self) -> bool {
+        matches!(
+            self,
+            Self::Before
+                | Self::After
+                | Self::Marker
+                | Self::Placeholder
+                | Self::FileSelectorButton
+                | Self::Checkmark
+                | Self::PickerIcon
+                | Self::Picker
+        )
+    }
+
+    // ::before and ::after accept ::marker, and so does ::column, which also
+    // accepts ::scroll-marker.
+    fn valid_after_before_or_after(&self) -> bool {
+        matches!(self, Self::Marker | Self::Column | Self::ScrollMarker)
+    }
+
+    fn is_before_or_after(&self) -> bool {
+        matches!(self, Self::Before | Self::After | Self::Column)
     }
 
     fn specificity_count(&self) -> u32 {
@@ -241,7 +347,17 @@ impl ::selectors::parser::PseudoElement for PseudoElement {
 
     fn accepts_state_pseudo_classes(&self) -> bool {
         // `:only-child` is allowed after a descendant of a pseudo-element root.
-        self.is_in_pseudo_element_tree()
+        self.is_in_pseudo_element_tree() ||
+            matches!(
+                self,
+                Self::FileSelectorButton
+                    | Self::Placeholder
+                    | Self::ColorSwatch
+                    | Self::SliderFill
+                    | Self::SliderThumb
+                    | Self::SliderTrack
+                    | Self::MozProgressBar
+            )
     }
 }
 
@@ -287,12 +403,23 @@ impl PseudoElement {
             ViewTransition => 23,
             ViewTransitionGroup(..) | ViewTransitionImagePair(..) => 24,
             ViewTransitionOld(..) | ViewTransitionNew(..) => 25,
+            TargetText => 26,
+            SpellingError => 27,
+            GrammarError => 28,
+            SearchText => 29,
+            Picker => 30,
+            PickerIcon => 31,
+            Checkmark => 32,
+            ScrollMarker => 33,
+            ScrollMarkerGroup => 34,
+            ScrollButton(..) => 35,
+            Column => 36,
         }
     }
 
     /// An array of `None`, one per pseudo-element.
     pub fn pseudo_none_array<T>() -> [Option<T>; PSEUDO_COUNT] {
-        Default::default()
+        std::array::from_fn(|_| None)
     }
 
     /// Creates a pseudo-element from an eager index.
@@ -426,7 +553,18 @@ impl PseudoElement {
             | PseudoElement::ViewTransitionGroup(..)
             | PseudoElement::ViewTransitionImagePair(..)
             | PseudoElement::ViewTransitionOld(..)
-            | PseudoElement::ViewTransitionNew(..) => PseudoElementCascadeType::Lazy,
+            | PseudoElement::ViewTransitionNew(..)
+            | PseudoElement::TargetText
+            | PseudoElement::SpellingError
+            | PseudoElement::GrammarError
+            | PseudoElement::SearchText
+            | PseudoElement::Picker
+            | PseudoElement::PickerIcon
+            | PseudoElement::Checkmark
+            | PseudoElement::ScrollMarker
+            | PseudoElement::ScrollMarkerGroup
+            | PseudoElement::ScrollButton(..)
+            | PseudoElement::Column => PseudoElementCascadeType::Lazy,
             PseudoElement::ServoAnonymousBox
             | PseudoElement::ServoAnonymousTable
             | PseudoElement::ServoAnonymousTableCell
@@ -457,7 +595,11 @@ impl PseudoElement {
                 PropertyFlags::APPLIES_TO_MARKER
             },
             PseudoElement::Placeholder => PropertyFlags::APPLIES_TO_PLACEHOLDER,
-            PseudoElement::Selection => PropertyFlags::APPLIES_TO_HIGHLIGHT,
+            PseudoElement::Selection
+            | PseudoElement::TargetText
+            | PseudoElement::SpellingError
+            | PseudoElement::GrammarError
+            | PseudoElement::SearchText => PropertyFlags::APPLIES_TO_HIGHLIGHT,
             _ => PropertyFlags::empty(),
         }
     }
@@ -496,7 +638,7 @@ impl PseudoElement {
     /// Whether this pseudo-element is the ::target-text pseudo.
     #[inline]
     pub fn is_target_text(&self) -> bool {
-        false
+        *self == PseudoElement::TargetText
     }
 
     /// Whether this is a highlight pseudo-element that is styled lazily during
@@ -941,6 +1083,15 @@ impl<'a, 'i> ::selectors::Parser<'i> for SelectorParser<'a> {
                 ServoTextControlInnerEditor
             },
             "view-transition" => ViewTransition,
+            "target-text" => TargetText,
+            "spelling-error" => SpellingError,
+            "grammar-error" => GrammarError,
+            "search-text" => SearchText,
+            "picker-icon" => PickerIcon,
+            "checkmark" => Checkmark,
+            "scroll-marker" => ScrollMarker,
+            "scroll-marker-group" => ScrollMarkerGroup,
+            "column" => Column,
             "slider-fill" => SliderFill,
             "slider-thumb" => SliderThumb,
             "slider-track" => SliderTrack,
@@ -994,6 +1145,15 @@ impl<'a, 'i> ::selectors::Parser<'i> for SelectorParser<'a> {
         arguments: &mut CssParser<'i>,
     ) -> Result<PseudoElement, ParseError> {
         use self::PseudoElement::*;
+        if name.eq_ignore_ascii_case("picker") {
+            if !arguments.expect_ident()?.eq_ignore_ascii_case("select") {
+                return Err(ParseError::custom(SelectorParseErrorKind::UnexpectedIdent));
+            }
+            return Ok(Picker);
+        }
+        if name.eq_ignore_ascii_case("scroll-button") {
+            return Ok(ScrollButton(ScrollButtonDirection::parse(arguments)?));
+        }
         let make: fn(PtNameAndClassSelector) -> PseudoElement = match_ignore_ascii_case! { name,
             "view-transition-group" => ViewTransitionGroup,
             "view-transition-image-pair" => ViewTransitionImagePair,
