@@ -778,8 +778,10 @@ impl Color {
     /// Returns transparent value.
     #[inline]
     pub fn transparent() -> Self {
-        // We should probably set authored to "transparent", but maybe it doesn't matter.
-        Self::from_absolute_color(AbsoluteColor::TRANSPARENT_BLACK)
+        Color::Absolute(Box::new(Absolute {
+            color: AbsoluteColor::TRANSPARENT_BLACK,
+            authored: Some("transparent".into()),
+        }))
     }
 
     /// Create a color from an [`AbsoluteColor`].

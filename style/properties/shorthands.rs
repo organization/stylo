@@ -2804,8 +2804,7 @@ pub mod background {
     use crate::properties::longhands::background_clip::single_value::computed_value::T as Clip;
     use crate::properties::longhands::background_origin::single_value::computed_value::T as Origin;
     use crate::properties::longhands::{
-        background_attachment, background_color, background_image, background_origin,
-        background_size,
+        background_attachment, background_image, background_origin, background_size,
     };
     use crate::properties::longhands::{
         background_position_x, background_position_y, background_repeat,
@@ -3031,9 +3030,13 @@ pub mod background {
                     }
                 }
 
-                if i == len - 1
-                    && *self.background_color != background_color::get_initial_specified_value()
-                {
+                let initial_color = match *self.background_color {
+                    specified::Color::Absolute(ref absolute) => {
+                        absolute.color == crate::color::AbsoluteColor::TRANSPARENT_BLACK
+                    },
+                    _ => false,
+                };
+                if i == len - 1 && !initial_color {
                     writer.item(self.background_color)?;
                 }
 
@@ -4299,18 +4302,8 @@ pub mod mask {
                     writer.item(repeat)?;
                 }
 
-                #[cfg(feature = "gecko")]
-                {
-                    if has_origin || (has_clip && *clip != Clip::NoClip) {
-                        writer.item(origin)?;
-                    }
-                }
-
-                #[cfg(feature = "servo")]
-                {
-                    if has_origin || has_clip {
-                        writer.item(origin)?;
-                    }
+                if has_origin || (has_clip && *clip != Clip::NoClip) {
+                    writer.item(origin)?;
                 }
 
                 if has_clip && *clip != From::from(*origin) {
