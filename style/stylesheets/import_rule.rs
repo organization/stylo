@@ -10,11 +10,12 @@ use crate::media_queries::MediaList;
 use crate::parser::{Parse, ParserContext};
 use crate::shared_lock::{DeepCloneWithLock, SharedRwLock, SharedRwLockReadGuard, ToCssWithGuard};
 use crate::stylesheets::{
-    CssRule, CssRuleType, StylesheetInDocument, layer_rule::LayerName,
+    CssRule, CssRuleType, StylesheetInDocument, layer_rule::LayerName, scope_rule::ScopeBounds,
     supports_rule::SupportsCondition,
 };
 use crate::values::CssUrl;
 use cssparser::{Parser, SourceLocation};
+use selectors::parser::ParseRelative;
 use std::fmt::{self, Write};
 use style_traits::{CssStringWriter, CssWriter, ToCss};
 use to_shmem::{SharedMemoryBuilder, ToShmem};
@@ -164,23 +165,31 @@ pub struct ImportRule {
     /// A `layer()` function name.
     pub layer: ImportLayer,
 
+    /// The bounds of a `scope()` function.
+    pub scope: Option<ScopeBounds>,
+
     /// The line and column of the rule's source code.
     pub source_location: SourceLocation,
 }
 
 impl ImportRule {
-    /// Parses the layer() / layer / supports() part of the import header, as per
-    /// https://drafts.csswg.org/css-cascade-5/#at-import:
+    /// Parses the layer() / layer / scope() / supports() part of the import header, as per
+    /// https://drafts.csswg.org/css-cascade-6/#at-import:
     ///
     ///     [ layer | layer(<layer-name>) ]?
+    ///     [ scope(<scope-boundaries>) ]?
     ///     [ supports([ <supports-condition> | <declaration> ]) ]?
     ///
     /// We do this here so that the import preloader can look at this without having to parse the
     /// whole import rule or parse the media query list or what not.
-    pub fn parse_layer_and_supports(
+    pub fn parse_layer_scope_and_supports(
         input: &mut Parser,
         context: &mut ParserContext,
-    ) -> (ImportLayer, Option<ImportSupportsCondition>) {
+    ) -> (
+        ImportLayer,
+        Option<ScopeBounds>,
+        Option<ImportSupportsCondition>,
+    ) {
         let layer = if input
             .try_parse(|input| input.expect_ident_matching("layer"))
             .is_ok()
@@ -198,6 +207,19 @@ impl ImportRule {
                 .unwrap_or(ImportLayer::None)
         };
 
+        let scope = if crate::pref!("layout.css.at-scope.enabled") {
+            input
+                .try_parse(|input| {
+                    input.expect_function_matching("scope")?;
+                    input.parse_nested_block(|input| {
+                        ScopeBounds::parse(context, input, ParseRelative::No)
+                    })
+                })
+                .ok()
+        } else {
+            None
+        };
+
         let supports = input
             .try_parse(SupportsCondition::parse_for_import)
             .map(|condition| {
@@ -207,7 +229,7 @@ impl ImportRule {
             })
             .ok();
 
-        (layer, supports)
+        (layer, scope, supports)
     }
 }
 
@@ -226,6 +248,7 @@ impl DeepCloneWithLock for ImportRule {
             stylesheet: self.stylesheet.deep_clone_with_lock(lock, guard),
             supports: self.supports.clone(),
             layer: self.layer.clone(),
+            scope: self.scope.clone(),
             source_location: self.source_location,
         }
     }
@@ -239,6 +262,12 @@ impl ToCssWithGuard for ImportRule {
         if !matches!(self.layer, ImportLayer::None) {
             dest.write_char(' ')?;
             self.layer.to_css(&mut CssWriter::new(dest))?;
+        }
+
+        if let Some(ref scope) = self.scope {
+            dest.write_str(" scope(")?;
+            scope.to_css(&mut CssWriter::new(dest))?;
+            dest.write_char(')')?;
         }
 
         if let Some(ref supports) = self.supports {

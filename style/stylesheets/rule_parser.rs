@@ -353,6 +353,7 @@ pub enum AtRulePrelude {
         Arc<Locked<MediaList>>,
         Option<ImportSupportsCondition>,
         ImportLayer,
+        Option<ScopeBounds>,
     ),
     /// A @margin rule prelude.
     Margin(MarginRuleType),
@@ -426,13 +427,13 @@ impl<'a, 'i> AtRuleParser<'i> for TopLevelRuleParser<'a, 'i> {
                 let url =
                     CssUrl::new_from_untainted_string(url_string, &self.context, CorsMode::None);
 
-                let (layer, supports) =
-                    ImportRule::parse_layer_and_supports(input, &mut self.context);
+                let (layer, scope, supports) =
+                    ImportRule::parse_layer_scope_and_supports(input, &mut self.context);
 
                 let media = MediaList::parse(&mut self.context, input);
                 let media = Arc::new(self.shared_lock.wrap(media));
 
-                return Ok(AtRulePrelude::Import(url, media, supports, layer));
+                return Ok(AtRulePrelude::Import(url, media, supports, layer, scope));
             },
             AtRuleType::Namespace => {
                 if !self.check_state(State::Namespaces) {
@@ -503,7 +504,7 @@ impl<'a, 'i> AtRuleParser<'i> for TopLevelRuleParser<'a, 'i> {
         start: &ParserState,
     ) -> Result<Self::AtRule, ()> {
         match prelude {
-            AtRulePrelude::Import(url, media, supports, layer) => {
+            AtRulePrelude::Import(url, media, supports, layer, scope) => {
                 let loader = self
                     .loader
                     .expect("Expected a stylesheet loader for @import");
@@ -515,6 +516,7 @@ impl<'a, 'i> AtRuleParser<'i> for TopLevelRuleParser<'a, 'i> {
                     media,
                     supports,
                     layer,
+                    scope,
                 );
 
                 self.state = State::Imports;

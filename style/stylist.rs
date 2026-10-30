@@ -61,8 +61,8 @@ use crate::stylesheets::import_rule::ImportLayer;
 use crate::stylesheets::keyframes_rule::KeyframesAnimation;
 use crate::stylesheets::layer_rule::{LayerName, LayerOrder};
 use crate::stylesheets::scope_rule::{
-    ImplicitScopeRoot, ScopeRootCandidate, ScopeSubjectMap, ScopeTarget, collect_scope_roots,
-    element_is_outside_of_scope, scope_selector_list_is_trivial,
+    ImplicitScopeRoot, ScopeBounds, ScopeRootCandidate, ScopeSubjectMap, ScopeTarget,
+    collect_scope_roots, element_is_outside_of_scope, scope_selector_list_is_trivial,
 };
 use crate::stylesheets::{
     CounterStyleRule, CssRule, CssRuleRef, EffectiveRulesIterator, FontFaceRule,
@@ -4018,6 +4018,98 @@ impl CascadeData {
         Ok(())
     }
 
+    fn add_scope_condition<S>(
+        &mut self,
+        bounds: &ScopeBounds,
+        quirks_mode: QuirksMode,
+        stylesheet: &S,
+        sheet_index: usize,
+        containing_rule_state: &mut ContainingRuleState,
+        children_len: usize,
+    ) where
+        S: StylesheetInDocument + 'static,
+    {
+        containing_rule_state.nested_declarations_context = NestedDeclarationsContext::Scope;
+        let id = ScopeConditionId(self.scope_conditions.len() as u16);
+        let mut matches_shadow_host = false;
+        let implicit_scope_root = if let Some(start) = bounds.start.as_ref() {
+            matches_shadow_host = scope_start_matches_shadow_host(start);
+            // Would be unused, but use the default as fallback.
+            StylistImplicitScopeRoot::default()
+        } else {
+            // (Re)Moving stylesheets trigger a complete flush, so saving the implicit
+            // root here should be safe.
+            if let Some(root) = stylesheet.implicit_scope_root() {
+                matches_shadow_host = root.matches_shadow_host();
+                match root {
+                    ImplicitScopeRoot::InLightTree(_)
+                    | ImplicitScopeRoot::Constructed
+                    | ImplicitScopeRoot::DocumentElement => StylistImplicitScopeRoot::Normal(root),
+                    // Servo gives each shadow root its own cascade data, so the
+                    // root found for the sheet is the one for this tree.
+                    ImplicitScopeRoot::ShadowHost(_) | ImplicitScopeRoot::InShadowTree(_)
+                        if cfg!(feature = "servo") =>
+                    {
+                        StylistImplicitScopeRoot::Normal(root)
+                    },
+                    ImplicitScopeRoot::ShadowHost(_) | ImplicitScopeRoot::InShadowTree(_) => {
+                        // Style data can be shared between shadow trees, so we must
+                        // query the implicit root for that specific tree.
+                        // Shared stylesheet means shared sheet indices, so we can
+                        // use that to locate the implicit root.
+                        // Technically, this can also be applied to the light tree,
+                        // but that requires also knowing about what cascade level we're at.
+                        StylistImplicitScopeRoot::Cached(sheet_index)
+                    },
+                }
+            } else {
+                // Could not find implicit scope root, but use the default as fallback.
+                StylistImplicitScopeRoot::default()
+            }
+        };
+
+        let replaced = {
+            let start = bounds.start.as_ref().map(|selector| {
+                match containing_rule_state.ancestor_selector_lists.last() {
+                    Some(s) => selector.replace_parent_selector(s),
+                    None => selector.clone(),
+                }
+            });
+            let implicit_scope_selector = &*IMPLICIT_SCOPE;
+            let end = bounds
+                .end
+                .as_ref()
+                .map(|selector| selector.replace_parent_selector(implicit_scope_selector));
+            containing_rule_state
+                .ancestor_selector_lists
+                .push(implicit_scope_selector.clone());
+            ScopeBoundsWithHashes::new(quirks_mode, start, end)
+        };
+
+        if let Some(selectors) = replaced.start.as_ref() {
+            self.scope_subject_map
+                .add_bound_start(&selectors.selectors, quirks_mode);
+        }
+
+        let is_trivial = replaced.is_trivial();
+        self.scope_conditions.push(ScopeConditionReference {
+            parent: containing_rule_state.containing_scope_rule_state.id,
+            condition: Some(replaced),
+            implicit_scope_root,
+            is_trivial,
+        });
+
+        containing_rule_state
+            .containing_scope_rule_state
+            .matches_shadow_host
+            .nest_for_scope(matches_shadow_host);
+        containing_rule_state.containing_scope_rule_state.id = id;
+        containing_rule_state
+            .containing_scope_rule_state
+            .inner_dependencies
+            .reserve(children_len);
+    }
+
     fn add_rule_list<S>(
         &mut self,
         rules: std::slice::Iter<CssRule>,
@@ -4295,6 +4387,18 @@ impl CascadeData {
                         },
                         ImportLayer::None => {},
                     }
+                    if let Some(ref bounds) = import_rule.scope
+                        && self.scope_conditions.len() <= u16::MAX.into()
+                    {
+                        self.add_scope_condition(
+                            bounds,
+                            quirks_mode,
+                            stylesheet,
+                            sheet_index,
+                            containing_rule_state,
+                            children.iter().len(),
+                        );
+                    }
                 },
                 CssRule::Media(ref media_rule) => {
                     if rebuild_kind.should_rebuild_invalidation() {
@@ -4352,90 +4456,14 @@ impl CascadeData {
                         .insert(RuleCascadeFlags::APPEARANCE_BASE);
                 },
                 CssRule::Scope(ref rule) if self.scope_conditions.len() <= u16::MAX.into() => {
-                    containing_rule_state.nested_declarations_context =
-                        NestedDeclarationsContext::Scope;
-                    let id = ScopeConditionId(self.scope_conditions.len() as u16);
-                    let mut matches_shadow_host = false;
-                    let implicit_scope_root = if let Some(start) = rule.bounds.start.as_ref() {
-                        matches_shadow_host = scope_start_matches_shadow_host(start);
-                        // Would be unused, but use the default as fallback.
-                        StylistImplicitScopeRoot::default()
-                    } else {
-                        // (Re)Moving stylesheets trigger a complete flush, so saving the implicit
-                        // root here should be safe.
-                        if let Some(root) = stylesheet.implicit_scope_root() {
-                            matches_shadow_host = root.matches_shadow_host();
-                            match root {
-                                ImplicitScopeRoot::InLightTree(_)
-                                | ImplicitScopeRoot::Constructed
-                                | ImplicitScopeRoot::DocumentElement => {
-                                    StylistImplicitScopeRoot::Normal(root)
-                                },
-                                // Servo gives each shadow root its own cascade data, so the
-                                // root found for the sheet is the one for this tree.
-                                ImplicitScopeRoot::ShadowHost(_)
-                                | ImplicitScopeRoot::InShadowTree(_)
-                                    if cfg!(feature = "servo") =>
-                                {
-                                    StylistImplicitScopeRoot::Normal(root)
-                                },
-                                ImplicitScopeRoot::ShadowHost(_)
-                                | ImplicitScopeRoot::InShadowTree(_) => {
-                                    // Style data can be shared between shadow trees, so we must
-                                    // query the implicit root for that specific tree.
-                                    // Shared stylesheet means shared sheet indices, so we can
-                                    // use that to locate the implicit root.
-                                    // Technically, this can also be applied to the light tree,
-                                    // but that requires also knowing about what cascade level we're at.
-                                    StylistImplicitScopeRoot::Cached(sheet_index)
-                                },
-                            }
-                        } else {
-                            // Could not find implicit scope root, but use the default as fallback.
-                            StylistImplicitScopeRoot::default()
-                        }
-                    };
-
-                    let replaced =
-                        {
-                            let start = rule.bounds.start.as_ref().map(|selector| {
-                                match containing_rule_state.ancestor_selector_lists.last() {
-                                    Some(s) => selector.replace_parent_selector(s),
-                                    None => selector.clone(),
-                                }
-                            });
-                            let implicit_scope_selector = &*IMPLICIT_SCOPE;
-                            let end = rule.bounds.end.as_ref().map(|selector| {
-                                selector.replace_parent_selector(implicit_scope_selector)
-                            });
-                            containing_rule_state
-                                .ancestor_selector_lists
-                                .push(implicit_scope_selector.clone());
-                            ScopeBoundsWithHashes::new(quirks_mode, start, end)
-                        };
-
-                    if let Some(selectors) = replaced.start.as_ref() {
-                        self.scope_subject_map
-                            .add_bound_start(&selectors.selectors, quirks_mode);
-                    }
-
-                    let is_trivial = replaced.is_trivial();
-                    self.scope_conditions.push(ScopeConditionReference {
-                        parent: containing_rule_state.containing_scope_rule_state.id,
-                        condition: Some(replaced),
-                        implicit_scope_root,
-                        is_trivial,
-                    });
-
-                    containing_rule_state
-                        .containing_scope_rule_state
-                        .matches_shadow_host
-                        .nest_for_scope(matches_shadow_host);
-                    containing_rule_state.containing_scope_rule_state.id = id;
-                    containing_rule_state
-                        .containing_scope_rule_state
-                        .inner_dependencies
-                        .reserve(children.iter().len());
+                    self.add_scope_condition(
+                        &rule.bounds,
+                        quirks_mode,
+                        stylesheet,
+                        sheet_index,
+                        containing_rule_state,
+                        children.iter().len(),
+                    );
                 },
                 // We don't care about any other rule.
                 _ => {},
