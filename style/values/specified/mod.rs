@@ -44,15 +44,15 @@ pub use self::border::{
 };
 pub use self::box_::{
     AlignmentBaseline, Appearance, BackfaceVisibility, BaselineShift, BaselineSource,
-    BlockStepAlign, BlockStepInsert, BlockStepRound, BlockStepSize, ScrollAxisLock,
-    ScrollMarkerGroup, ScrollTargetGroup, BoxAlign,
-    BoxCollapse, BoxDirection, BoxOrient, BoxPack, BreakBetween, BreakWithin, Clear, Contain,
+    BlockStepAlign, BlockStepInsert, BlockStepRound, BlockStepSize, BoxAlign, BoxCollapse,
+    BoxDirection, BoxOrient, BoxPack, BreakBetween, BreakWithin, Clear, Contain,
     ContainIntrinsicSize, ContainerName, ContainerType, ContentVisibility, DirectionProperty,
     Display, DominantBaseline, Float, ImageOrientation, Isolation, LineClamp, MarginTrim, Orient,
     Overflow, OverflowAnchor, OverflowClipMargin, OverscrollBehavior, Perspective,
-    PositionProperty, Resize, ScrollBehavior, ScrollSnapAlign, ScrollSnapAxis, ScrollSnapStop,
-    ScrollSnapStrictness, ScrollSnapType, ScrollbarGutter, ScrollbarInset, TextOrientation,
-    TopLayer, TouchAction, Visibility, WillChange, WillChangeBits, WritingModeProperty, Zoom,
+    PositionProperty, Resize, ScrollAxisLock, ScrollBehavior, ScrollMarkerGroup, ScrollSnapAlign,
+    ScrollSnapAxis, ScrollSnapStop, ScrollSnapStrictness, ScrollSnapType, ScrollTargetGroup,
+    ScrollbarGutter, ScrollbarInset, TextOrientation, TopLayer, TouchAction, Visibility,
+    WillChange, WillChangeBits, WritingModeProperty, Zoom,
 };
 pub use self::calc::{CalcLengthPercentage, CalcNumeric};
 pub use self::color::{
@@ -120,6 +120,11 @@ pub use self::svg::{SVGPaintOrder, SVGStrokeDashArray, SVGWidth, VectorEffect};
 pub use self::svg_path::SVGPathData;
 pub use self::table::{BorderCollapse, EmptyCells, TableLayout};
 pub use self::text::{
+    HangingPunctuation, TextAlignAll, TextAlignLast, TextAutospace, TextDecorationSkipSpaces,
+    TextFit, TextGroupAlign, TextSizeAdjustAmount, TextSpacingTrim, TextUnderlinePosition,
+    WordSpaceTransform,
+};
+pub use self::text::{
     HyphenateCharacter, HyphenateLimitChars, Hyphens, RubyAlign, RubyPosition, TextCombineUpright,
     TextDecorationStyle, TextRendering, TextSecurity, TextSizeAdjust, TextWrapMode, TextWrapStyle,
     UnicodeBidi, WhiteSpaceCollapse,
@@ -127,11 +132,6 @@ pub use self::text::{
 pub use self::text::{InitialLetter, LetterSpacing, LineBreak, TextAlign, TextIndent};
 pub use self::text::{OverflowWrap, TextEmphasisPosition, TextEmphasisStyle, WordBreak};
 pub use self::text::{TextAlignKeyword, TextDecorationLine, TextOverflow, WordSpacing};
-pub use self::text::{
-    HangingPunctuation, TextAlignAll, TextAlignLast, TextAutospace, TextDecorationSkipSpaces,
-    TextFit, TextGroupAlign, TextSizeAdjustAmount, TextSpacingTrim, TextUnderlinePosition,
-    WordSpaceTransform,
-};
 pub use self::text::{TextBoxEdge, TextBoxTrim};
 pub use self::text::{
     TextDecorationInset, TextDecorationLength, TextDecorationSkipInk, TextJustify, TextTransform,
