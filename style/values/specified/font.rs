@@ -1636,9 +1636,11 @@ pub enum FontSynthesisStyle {
 #[derive(
     Clone,
     Debug,
+    Deserialize,
     Eq,
     MallocSizeOf,
     PartialEq,
+    Serialize,
     SpecifiedValueInfo,
     ToComputedValue,
     ToResolvedValue,

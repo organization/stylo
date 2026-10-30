@@ -640,7 +640,6 @@ pub mod vertical_align {
     }
 }
 
-#[cfg(feature = "gecko")]
 pub mod offset {
     use super::*;
     use crate::Zero;
@@ -809,7 +808,6 @@ pub mod columns {
     }
 }
 
-#[cfg(feature = "gecko")]
 pub mod column_rule {
     pub use crate::properties::generated::shorthands::column_rule::*;
 
@@ -999,7 +997,6 @@ pub mod white_space {
     }
 }
 
-#[cfg(feature = "gecko")]
 pub mod _webkit_text_stroke {
     pub use crate::properties::generated::shorthands::_webkit_text_stroke::*;
 
@@ -1177,7 +1174,6 @@ pub mod gap {
     }
 }
 
-#[cfg(feature = "gecko")]
 pub mod marker {
     pub use crate::properties::generated::shorthands::marker::*;
 
@@ -1620,7 +1616,6 @@ pub mod grid_area {
     }
 }
 
-#[cfg(feature = "gecko")]
 pub mod position_try {
     pub use crate::properties::generated::shorthands::position_try::*;
 
@@ -1653,7 +1648,6 @@ pub mod position_try {
     }
 }
 
-#[cfg(feature = "gecko")]
 pub mod scroll_timeline {
     pub use crate::properties::generated::shorthands::scroll_timeline::*;
 
@@ -1710,7 +1704,6 @@ pub mod scroll_timeline {
     }
 }
 
-#[cfg(feature = "gecko")]
 pub mod view_timeline {
     pub use crate::properties::generated::shorthands::view_timeline::*;
 
@@ -1797,7 +1790,6 @@ pub mod view_timeline {
     }
 }
 
-#[cfg(feature = "gecko")]
 pub mod animation_range {
     pub use crate::properties::generated::shorthands::animation_range::*;
 
