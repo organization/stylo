@@ -147,6 +147,11 @@ bitflags! {
         /// A flag used to mark styles which have a `container-type` that
         /// includes `scroll-state`, or under one.
         const SELF_OR_ANCESTOR_HAS_SCROLL_STATE_CONTAINER_TYPE = 1 << 30;
+
+        /// Whether this is the style of a canvas element that lays out its
+        /// children as drawable content.
+        /// <https://github.com/WICG/html-in-canvas>
+        const IS_DRAWABLE_CANVAS = 1 << 31;
     }
 }
 
