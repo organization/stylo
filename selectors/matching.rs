@@ -1090,6 +1090,44 @@ where
     })
 }
 
+fn matches_host_context<E>(
+    element: E,
+    selector: &Selector<E::Impl>,
+    context: &mut MatchingContext<E::Impl>,
+) -> KleeneValue
+where
+    E: Element,
+{
+    if context.shadow_host() != Some(element.opaque()) {
+        return KleeneValue::False;
+    }
+    context.nest(|context| {
+        context.with_featureless(false, |context| {
+            let mut current = Some(element);
+            while let Some(candidate) = current {
+                if matches_complex_selector(
+                    selector.iter(),
+                    candidate,
+                    context,
+                    SubjectOrPseudoElement::No,
+                )
+                .to_bool(true)
+                {
+                    return KleeneValue::True;
+                }
+                current = candidate.parent_element().or_else(|| {
+                    if candidate.parent_node_is_shadow_root() {
+                        candidate.containing_shadow_host()
+                    } else {
+                        None
+                    }
+                });
+            }
+            KleeneValue::False
+        })
+    })
+}
+
 fn matches_slotted<E>(
     element: E,
     selector: &Selector<E::Impl>,
@@ -1153,7 +1191,7 @@ pub(crate) fn compound_matches_featureless_host<Impl: SelectorImpl>(
         match component {
             Component::Scope | Component::ImplicitScope if scope_matches_featureless_host => {},
             // :host only matches featureless elements.
-            Component::Host(..) => {},
+            Component::Host(..) | Component::HostContext(..) => {},
             // Pseudo-elements are allowed to match as well.
             Component::PseudoElement(..) => {},
             // :has() looks at the shadow tree, but another selector has to match the host.
@@ -1335,6 +1373,9 @@ where
         },
         Component::Host(ref selector) => {
             return matches_host(element, selector.as_ref(), context.shared, rightmost);
+        },
+        Component::HostContext(ref selector) => {
+            return matches_host_context(element, selector, context.shared);
         },
         Component::ParentSelector => match context.shared.scope_element {
             Some(ref scope_element) => element.opaque() == *scope_element,

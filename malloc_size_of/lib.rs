@@ -727,7 +727,8 @@ where
             Component::NonTSPseudoClass(pseudo) => (*pseudo).size_of(ops),
             Component::Slotted(selector)
             | Component::HasSlotted(selector)
-            | Component::Host(Some(selector)) => selector.unconditional_size_of(ops),
+            | Component::Host(Some(selector))
+            | Component::HostContext(selector) => selector.unconditional_size_of(ops),
             Component::Is(list) | Component::Where(list) => list.unconditional_size_of(ops),
             Component::Has(relative_selectors) => relative_selectors.size_of(ops),
             Component::NthOf(nth_of_data) => nth_of_data.size_of(ops),

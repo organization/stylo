@@ -333,6 +333,12 @@ where
                 *specificity += Specificity::from(selector.specificity());
                 flags.insert(selector.flags());
             },
+            Component::HostContext(ref selector) => {
+                flags.insert(SelectorFlags::HAS_HOST);
+                specificity.class_like_selectors += 1;
+                *specificity += Specificity::from(selector.specificity());
+                flags.insert(selector.flags());
+            },
             Component::Host(ref selector) => {
                 flags.insert(SelectorFlags::HAS_HOST);
                 specificity.class_like_selectors += 1;

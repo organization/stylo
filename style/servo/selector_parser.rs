@@ -1031,6 +1031,11 @@ impl<'a, 'i> ::selectors::Parser<'i> for SelectorParser<'a> {
     }
 
     #[inline]
+    fn parse_host_context(&self) -> bool {
+        crate::pref!("layout.css.host-context.enabled")
+    }
+
+    #[inline]
     fn parse_parent_selector(&self) -> bool {
         true
     }
