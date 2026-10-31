@@ -279,7 +279,7 @@ impl AtRuleType {
             "font-face" => Self::FontFace,
             "font-feature-values" => Self::FontFeatureValues,
             "font-palette-values" if crate::pref!("layout.css.font-palette.enabled", gecko = true) => Self::FontPaletteValues,
-            "counter-style" if cfg!(feature = "gecko") => Self::CounterStyle,
+            "counter-style" if crate::pref!("layout.css.counter-style-rule.enabled", gecko = true) => Self::CounterStyle,
             "media" => Self::Media,
             "custom-media" if crate::pref!("layout.css.custom-media.enabled") => Self::CustomMedia,
             "container" if crate::pref!("layout.css.container-queries.enabled", gecko = true) => Self::Container,
