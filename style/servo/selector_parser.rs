@@ -92,6 +92,7 @@ pub enum PseudoElement {
     ScrollMarkerGroup,
     ScrollButton(ScrollButtonDirection),
     Column,
+    Highlight(HighlightName),
 }
 
 /// The argument of `::scroll-button()`.
@@ -148,7 +149,35 @@ impl ScrollButtonDirection {
 }
 
 /// The count of all pseudo-elements.
-pub const PSEUDO_COUNT: usize = 37;
+pub const PSEUDO_COUNT: usize = 38;
+
+/// The name of a `::highlight()` pseudo-element, interned so that
+/// [`PseudoElement`] stays `Copy`.
+#[derive(
+    Clone, Copy, Debug, Deserialize, Eq, Hash, MallocSizeOf, PartialEq, Serialize, ToShmem,
+)]
+pub struct HighlightName(u32);
+
+static HIGHLIGHT_NAMES: std::sync::RwLock<Vec<Atom>> = std::sync::RwLock::new(Vec::new());
+
+impl HighlightName {
+    fn intern(name: Atom) -> Self {
+        let mut names = HIGHLIGHT_NAMES.write().unwrap();
+        let index = match names.iter().position(|existing| *existing == name) {
+            Some(index) => index,
+            None => {
+                names.push(name);
+                names.len() - 1
+            },
+        };
+        Self(index as u32)
+    }
+
+    /// The name of the highlight.
+    pub fn name(&self) -> Atom {
+        HIGHLIGHT_NAMES.read().unwrap()[self.0 as usize].clone()
+    }
+}
 
 /// The argument of the view transition pseudo-elements, interned so that
 /// [`PseudoElement`] stays `Copy`.
@@ -291,6 +320,11 @@ impl ToCss for PseudoElement {
                 return dest.write_char(')');
             },
             Column => "::column",
+            Highlight(name) => {
+                dest.write_str("::highlight(")?;
+                serialize_identifier(&name.name(), dest)?;
+                return dest.write_char(')');
+            },
         })
     }
 }
@@ -417,6 +451,7 @@ impl PseudoElement {
             ScrollMarkerGroup => 34,
             ScrollButton(..) => 35,
             Column => 36,
+            Highlight(..) => 37,
         }
     }
 
@@ -567,7 +602,8 @@ impl PseudoElement {
             | PseudoElement::ScrollMarker
             | PseudoElement::ScrollMarkerGroup
             | PseudoElement::ScrollButton(..)
-            | PseudoElement::Column => PseudoElementCascadeType::Lazy,
+            | PseudoElement::Column
+            | PseudoElement::Highlight(..) => PseudoElementCascadeType::Lazy,
             PseudoElement::ServoAnonymousBox
             | PseudoElement::ServoAnonymousTable
             | PseudoElement::ServoAnonymousTableCell
@@ -602,7 +638,8 @@ impl PseudoElement {
             | PseudoElement::TargetText
             | PseudoElement::SpellingError
             | PseudoElement::GrammarError
-            | PseudoElement::SearchText => PropertyFlags::APPLIES_TO_HIGHLIGHT,
+            | PseudoElement::SearchText
+            | PseudoElement::Highlight(..) => PropertyFlags::APPLIES_TO_HIGHLIGHT,
             _ => PropertyFlags::empty(),
         }
     }
@@ -623,7 +660,7 @@ impl PseudoElement {
 
     /// Whether this pseudo-element is the ::highlight pseudo.
     pub fn is_highlight(&self) -> bool {
-        false
+        matches!(*self, Self::Highlight(..))
     }
 
     /// Whether this pseudo-element takes an argument.
@@ -1156,6 +1193,10 @@ impl<'a, 'i> ::selectors::Parser<'i> for SelectorParser<'a> {
         }
         if name.eq_ignore_ascii_case("scroll-button") {
             return Ok(ScrollButton(ScrollButtonDirection::parse(arguments)?));
+        }
+        if name.eq_ignore_ascii_case("highlight") {
+            let name = arguments.expect_ident()?;
+            return Ok(Highlight(HighlightName::intern(Atom::from(&**name))));
         }
         let make: fn(PtNameAndClassSelector) -> PseudoElement = match_ignore_ascii_case! { name,
             "view-transition-group" => ViewTransitionGroup,
