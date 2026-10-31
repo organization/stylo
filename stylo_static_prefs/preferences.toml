@@ -78,6 +78,8 @@
 "layout.css.stylo-local-work-queue.in-main-thread" = 32
 "layout.css.stylo-local-work-queue.in-worker" = 0
 "layout.css.stylo-work-unit-size" = 16
+"layout.css.supported-font-formats" = 0
+"layout.css.supported-font-techs" = 0
 "layout.css.supports.at-rule.enabled" = true
 "layout.css.svg-properties.enabled" = false
 "layout.css.system-ui.enabled" = true
