@@ -1590,7 +1590,14 @@ impl PositionArea {
     }
 
     fn flip_logical_axis(&mut self, wm: WritingMode, axis: LogicalAxis) {
-        if self.first.axis().to_logical(wm, LogicalAxis::Block) == Some(axis) {
+        let first = self.first.axis().to_logical(wm, LogicalAxis::Block);
+        let second = self.second.axis().to_logical(wm, LogicalAxis::Inline);
+        let first_is_axis = match (first, second) {
+            (Some(first), _) => first == axis,
+            (None, Some(second)) => second != axis,
+            (None, None) => axis == LogicalAxis::Block,
+        };
+        if first_is_axis {
             self.first = self.first.flip_track();
         } else {
             self.second = self.second.flip_track();
