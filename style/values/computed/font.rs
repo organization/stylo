@@ -451,11 +451,26 @@ impl FontFamily {
         generic_font_family!(MONOSPACE, Monospace);
         generic_font_family!(CURSIVE, Cursive);
         generic_font_family!(FANTASY, Fantasy);
-        #[cfg(feature = "gecko")]
         generic_font_family!(MATH, Math);
         #[cfg(feature = "gecko")]
         generic_font_family!(MOZ_EMOJI, MozEmoji);
         generic_font_family!(SYSTEM_UI, SystemUi);
+        #[cfg(feature = "servo")]
+        generic_font_family!(UI_SERIF, UiSerif);
+        #[cfg(feature = "servo")]
+        generic_font_family!(UI_SANS_SERIF, UiSansSerif);
+        #[cfg(feature = "servo")]
+        generic_font_family!(UI_MONOSPACE, UiMonospace);
+        #[cfg(feature = "servo")]
+        generic_font_family!(UI_ROUNDED, UiRounded);
+        #[cfg(feature = "servo")]
+        generic_font_family!(FANG_SONG, FangSong);
+        #[cfg(feature = "servo")]
+        generic_font_family!(KAI, Kai);
+        #[cfg(feature = "servo")]
+        generic_font_family!(KHMER_MUL, KhmerMul);
+        #[cfg(feature = "servo")]
+        generic_font_family!(NASTALIQ, Nastaliq);
 
         let family = match generic {
             GenericFontFamily::None => {
@@ -467,11 +482,26 @@ impl FontFamily {
             GenericFontFamily::Monospace => &*MONOSPACE,
             GenericFontFamily::Cursive => &*CURSIVE,
             GenericFontFamily::Fantasy => &*FANTASY,
-            #[cfg(feature = "gecko")]
             GenericFontFamily::Math => &*MATH,
             #[cfg(feature = "gecko")]
             GenericFontFamily::MozEmoji => &*MOZ_EMOJI,
             GenericFontFamily::SystemUi => &*SYSTEM_UI,
+            #[cfg(feature = "servo")]
+            GenericFontFamily::UiSerif => &*UI_SERIF,
+            #[cfg(feature = "servo")]
+            GenericFontFamily::UiSansSerif => &*UI_SANS_SERIF,
+            #[cfg(feature = "servo")]
+            GenericFontFamily::UiMonospace => &*UI_MONOSPACE,
+            #[cfg(feature = "servo")]
+            GenericFontFamily::UiRounded => &*UI_ROUNDED,
+            #[cfg(feature = "servo")]
+            GenericFontFamily::FangSong => &*FANG_SONG,
+            #[cfg(feature = "servo")]
+            GenericFontFamily::Kai => &*KAI,
+            #[cfg(feature = "servo")]
+            GenericFontFamily::KhmerMul => &*KHMER_MUL,
+            #[cfg(feature = "servo")]
+            GenericFontFamily::Nastaliq => &*NASTALIQ,
         };
         debug_assert_eq!(
             *family.families.iter().next().unwrap(),
@@ -644,6 +674,16 @@ fn math_enabled(context: &ParserContext) -> bool {
     context.chrome_rules_enabled() || crate::pref!("mathml.font_family_math.enabled")
 }
 
+#[cfg(feature = "servo")]
+fn math_enabled(_: &ParserContext) -> bool {
+    true
+}
+
+#[cfg(feature = "servo")]
+fn generic_function_only(_: &ParserContext) -> bool {
+    false
+}
+
 /// A generic font-family name.
 ///
 /// The order here is important, if you change it make sure that
@@ -683,11 +723,38 @@ pub enum GenericFontFamily {
     Monospace,
     Cursive,
     Fantasy,
-    #[cfg(feature = "gecko")]
     #[parse(condition = "math_enabled")]
     Math,
     #[parse(condition = "system_ui_enabled")]
     SystemUi,
+    #[cfg(feature = "servo")]
+    UiSerif,
+    #[cfg(feature = "servo")]
+    UiSansSerif,
+    #[cfg(feature = "servo")]
+    UiMonospace,
+    #[cfg(feature = "servo")]
+    UiRounded,
+    /// `generic(fangsong)`, parsed by `SingleFontFamily`.
+    #[cfg(feature = "servo")]
+    #[css(keyword = "generic(fangsong)")]
+    #[parse(condition = "generic_function_only")]
+    FangSong,
+    /// `generic(kai)`, parsed by `SingleFontFamily`.
+    #[cfg(feature = "servo")]
+    #[css(keyword = "generic(kai)")]
+    #[parse(condition = "generic_function_only")]
+    Kai,
+    /// `generic(khmer-mul)`, parsed by `SingleFontFamily`.
+    #[cfg(feature = "servo")]
+    #[css(keyword = "generic(khmer-mul)")]
+    #[parse(condition = "generic_function_only")]
+    KhmerMul,
+    /// `generic(nastaliq)`, parsed by `SingleFontFamily`.
+    #[cfg(feature = "servo")]
+    #[css(keyword = "generic(nastaliq)")]
+    #[parse(condition = "generic_function_only")]
+    Nastaliq,
     /// An internal value for emoji font selection.
     #[css(skip)]
     #[cfg(feature = "gecko")]
@@ -700,9 +767,18 @@ impl GenericFontFamily {
     /// the user. See bug 789788 and bug 1730098.
     pub(crate) fn valid_for_user_font_prioritization(self) -> bool {
         match self {
-            Self::None | Self::Cursive | Self::Fantasy | Self::SystemUi => false,
+            Self::None | Self::Cursive | Self::Fantasy | Self::SystemUi | Self::Math => false,
             #[cfg(feature = "gecko")]
-            Self::Math | Self::MozEmoji => false,
+            Self::MozEmoji => false,
+            #[cfg(feature = "servo")]
+            Self::UiSerif
+            | Self::UiSansSerif
+            | Self::UiMonospace
+            | Self::UiRounded
+            | Self::FangSong
+            | Self::Kai
+            | Self::KhmerMul
+            | Self::Nastaliq => false,
             Self::Serif | Self::SansSerif | Self::Monospace => true,
         }
     }
@@ -763,6 +839,23 @@ impl Parse for SingleFontFamily {
         }
 
         if let Ok(generic) = input.try_parse(|i| GenericFontFamily::parse(context, i)) {
+            return Ok(SingleFontFamily::Generic(generic));
+        }
+
+        #[cfg(feature = "servo")]
+        if let Ok(generic) = input.try_parse(|i| {
+            i.expect_function_matching("generic")?;
+            i.parse_nested_block(|i| {
+                let ident = i.expect_ident()?;
+                Ok(cssparser::match_ignore_ascii_case! { &**ident,
+                    "fangsong" => GenericFontFamily::FangSong,
+                    "kai" => GenericFontFamily::Kai,
+                    "khmer-mul" => GenericFontFamily::KhmerMul,
+                    "nastaliq" => GenericFontFamily::Nastaliq,
+                    _ => return Err(ParseError::unexpected_token()),
+                })
+            })
+        }) {
             return Ok(SingleFontFamily::Generic(generic));
         }
 
