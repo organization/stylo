@@ -1075,10 +1075,10 @@ impl<'a, 'i> ::selectors::Parser<'i> for SelectorParser<'a> {
         &self,
         name: &str,
         parser: &mut CssParser<'i>,
-        after_part: bool,
+        _after_part: bool,
     ) -> Result<NonTSPseudoClass, ParseError> {
         let pseudo_class = match_ignore_ascii_case! { &name,
-            "lang" if !after_part => {
+            "lang" => {
                 NonTSPseudoClass::Lang(parser.expect_ident_or_string()?.as_ref().into())
             },
             "state" => {
