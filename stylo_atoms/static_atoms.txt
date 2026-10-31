@@ -176,7 +176,9 @@ scan
 screen
 scripting
 scroll-position
+scrollable
 scrollbar-inline-size
+scrolled
 search
 seeked
 seeking
@@ -189,6 +191,7 @@ sessionavailable
 show
 signalingstatechange
 slotchange
+snapped
 squeeze
 squeezeend
 squeezestart
@@ -197,6 +200,7 @@ statechange
 storage
 stroke
 stroke-opacity
+stuck
 submit
 suspend
 svg
