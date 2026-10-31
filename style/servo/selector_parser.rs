@@ -92,6 +92,34 @@ pub enum PseudoElement {
     ScrollMarkerGroup,
     ScrollButton(ScrollButtonDirection),
     Column,
+
+    // A `::-webkit-*` pseudo-element that is not known, which is valid but never matches.
+    UnknownWebkit(UnknownWebkitName),
+}
+
+/// The lowercased name of an unknown `::-webkit-*` pseudo-element after the prefix, interned so
+/// that [`PseudoElement`] stays `Copy`.
+///
+/// <https://drafts.csswg.org/selectors-4/#compat>
+#[derive(
+    Clone, Copy, Debug, Deserialize, Eq, Hash, MallocSizeOf, PartialEq, Serialize, ToShmem,
+)]
+pub struct UnknownWebkitName(u32);
+
+static UNKNOWN_WEBKIT_NAMES: std::sync::RwLock<Vec<Atom>> = std::sync::RwLock::new(Vec::new());
+
+impl UnknownWebkitName {
+    fn intern(name: Atom) -> Self {
+        let mut names = UNKNOWN_WEBKIT_NAMES.write().unwrap();
+        let index = match names.iter().position(|existing| *existing == name) {
+            Some(index) => index,
+            None => {
+                names.push(name);
+                names.len() - 1
+            },
+        };
+        Self(index as u32)
+    }
 }
 
 /// The argument of `::scroll-button()`.
@@ -148,7 +176,7 @@ impl ScrollButtonDirection {
 }
 
 /// The count of all pseudo-elements.
-pub const PSEUDO_COUNT: usize = 37;
+pub const PSEUDO_COUNT: usize = 38;
 
 /// The argument of the view transition pseudo-elements, interned so that
 /// [`PseudoElement`] stays `Copy`.
@@ -291,6 +319,11 @@ impl ToCss for PseudoElement {
                 return dest.write_char(')');
             },
             Column => "::column",
+            UnknownWebkit(name) => {
+                dest.write_str("::-webkit-")?;
+                let names = UNKNOWN_WEBKIT_NAMES.read().unwrap();
+                return serialize_identifier(&names[name.0 as usize], dest);
+            },
         })
     }
 }
@@ -360,6 +393,7 @@ impl ::selectors::parser::PseudoElement for PseudoElement {
                     | Self::SliderThumb
                     | Self::SliderTrack
                     | Self::MozProgressBar
+                    | Self::UnknownWebkit(..)
             )
     }
 }
@@ -417,6 +451,7 @@ impl PseudoElement {
             ScrollMarkerGroup => 34,
             ScrollButton(..) => 35,
             Column => 36,
+            UnknownWebkit(..) => 37,
         }
     }
 
@@ -449,7 +484,7 @@ impl PseudoElement {
     /// Whether this is an unknown ::-webkit- pseudo-element.
     #[inline]
     pub fn is_unknown_webkit_pseudo_element(&self) -> bool {
-        false
+        matches!(*self, PseudoElement::UnknownWebkit(..))
     }
 
     /// Whether this pseudo-element is the ::marker pseudo.
@@ -567,7 +602,8 @@ impl PseudoElement {
             | PseudoElement::ScrollMarker
             | PseudoElement::ScrollMarkerGroup
             | PseudoElement::ScrollButton(..)
-            | PseudoElement::Column => PseudoElementCascadeType::Lazy,
+            | PseudoElement::Column
+            | PseudoElement::UnknownWebkit(..) => PseudoElementCascadeType::Lazy,
             PseudoElement::ServoAnonymousBox
             | PseudoElement::ServoAnonymousTable
             | PseudoElement::ServoAnonymousTableCell
@@ -1172,8 +1208,16 @@ impl<'a, 'i> ::selectors::Parser<'i> for SelectorParser<'a> {
                 }
                 ServoTableWrapper
             },
-            _ => return Err(ParseError::custom(SelectorParseErrorKind::UnexpectedIdent))
-
+            _ => {
+                // @supports must report unknown `-webkit-*` pseudo-elements as unsupported.
+                if self.for_supports_rule
+                    || name.len() <= 8
+                    || !name.as_bytes()[..8].eq_ignore_ascii_case(b"-webkit-")
+                {
+                    return Err(ParseError::custom(SelectorParseErrorKind::UnexpectedIdent));
+                }
+                UnknownWebkit(UnknownWebkitName::intern(name[8..].to_ascii_lowercase().into()))
+            }
         };
 
         Ok(pseudo_element)
