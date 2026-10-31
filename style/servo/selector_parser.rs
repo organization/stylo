@@ -95,6 +95,7 @@ pub enum PseudoElement {
 
     // A `::-webkit-*` pseudo-element that is not known, which is valid but never matches.
     UnknownWebkit(UnknownWebkitName),
+    Highlight(HighlightName),
 }
 
 /// The lowercased name of an unknown `::-webkit-*` pseudo-element after the prefix, interned so
@@ -176,7 +177,35 @@ impl ScrollButtonDirection {
 }
 
 /// The count of all pseudo-elements.
-pub const PSEUDO_COUNT: usize = 38;
+pub const PSEUDO_COUNT: usize = 39;
+
+/// The name of a `::highlight()` pseudo-element, interned so that
+/// [`PseudoElement`] stays `Copy`.
+#[derive(
+    Clone, Copy, Debug, Deserialize, Eq, Hash, MallocSizeOf, PartialEq, Serialize, ToShmem,
+)]
+pub struct HighlightName(u32);
+
+static HIGHLIGHT_NAMES: std::sync::RwLock<Vec<Atom>> = std::sync::RwLock::new(Vec::new());
+
+impl HighlightName {
+    fn intern(name: Atom) -> Self {
+        let mut names = HIGHLIGHT_NAMES.write().unwrap();
+        let index = match names.iter().position(|existing| *existing == name) {
+            Some(index) => index,
+            None => {
+                names.push(name);
+                names.len() - 1
+            },
+        };
+        Self(index as u32)
+    }
+
+    /// The name of the highlight.
+    pub fn name(&self) -> Atom {
+        HIGHLIGHT_NAMES.read().unwrap()[self.0 as usize].clone()
+    }
+}
 
 /// The argument of the view transition pseudo-elements, interned so that
 /// [`PseudoElement`] stays `Copy`.
@@ -324,6 +353,11 @@ impl ToCss for PseudoElement {
                 let names = UNKNOWN_WEBKIT_NAMES.read().unwrap();
                 return serialize_identifier(&names[name.0 as usize], dest);
             },
+            Highlight(name) => {
+                dest.write_str("::highlight(")?;
+                serialize_identifier(&name.name(), dest)?;
+                return dest.write_char(')');
+            },
         })
     }
 }
@@ -452,6 +486,7 @@ impl PseudoElement {
             ScrollButton(..) => 35,
             Column => 36,
             UnknownWebkit(..) => 37,
+            Highlight(..) => 38,
         }
     }
 
@@ -603,7 +638,8 @@ impl PseudoElement {
             | PseudoElement::ScrollMarkerGroup
             | PseudoElement::ScrollButton(..)
             | PseudoElement::Column
-            | PseudoElement::UnknownWebkit(..) => PseudoElementCascadeType::Lazy,
+            | PseudoElement::UnknownWebkit(..)
+            | PseudoElement::Highlight(..) => PseudoElementCascadeType::Lazy,
             PseudoElement::ServoAnonymousBox
             | PseudoElement::ServoAnonymousTable
             | PseudoElement::ServoAnonymousTableCell
@@ -638,7 +674,8 @@ impl PseudoElement {
             | PseudoElement::TargetText
             | PseudoElement::SpellingError
             | PseudoElement::GrammarError
-            | PseudoElement::SearchText => PropertyFlags::APPLIES_TO_HIGHLIGHT,
+            | PseudoElement::SearchText
+            | PseudoElement::Highlight(..) => PropertyFlags::APPLIES_TO_HIGHLIGHT,
             _ => PropertyFlags::empty(),
         }
     }
@@ -659,7 +696,23 @@ impl PseudoElement {
 
     /// Whether this pseudo-element is the ::highlight pseudo.
     pub fn is_highlight(&self) -> bool {
-        false
+        matches!(*self, Self::Highlight(..))
+    }
+
+    /// Whether this pseudo-element stands for a single pseudo-element of its
+    /// originating element, which a view transition pseudo-element without a
+    /// name in its argument does not.
+    pub fn names_one_element(&self) -> bool {
+        match *self {
+            Self::ViewTransitionGroup(argument)
+            | Self::ViewTransitionImagePair(argument)
+            | Self::ViewTransitionOld(argument)
+            | Self::ViewTransitionNew(argument) => PT_NAMES_AND_CLASSES.read().unwrap()
+                [argument.0 as usize]
+                .0
+                .is_some(),
+            _ => true,
+        }
     }
 
     /// Whether this pseudo-element takes an argument.
@@ -1247,6 +1300,10 @@ impl<'a, 'i> ::selectors::Parser<'i> for SelectorParser<'a> {
         }
         if name.eq_ignore_ascii_case("scroll-button") {
             return Ok(ScrollButton(ScrollButtonDirection::parse(arguments)?));
+        }
+        if name.eq_ignore_ascii_case("highlight") {
+            let name = arguments.expect_ident()?;
+            return Ok(Highlight(HighlightName::intern(Atom::from(&**name))));
         }
         let make: fn(PtNameAndClassSelector) -> PseudoElement = match_ignore_ascii_case! { name,
             "view-transition-group" => ViewTransitionGroup,

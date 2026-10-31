@@ -54,18 +54,9 @@ impl DeepCloneWithLock for ScopeRule {
 impl ToCssWithGuard for ScopeRule {
     fn to_css(&self, guard: &SharedRwLockReadGuard, dest: &mut CssStringWriter) -> fmt::Result {
         dest.write_str("@scope")?;
-        {
-            let mut writer = CssWriter::new(dest);
-            if let Some(start) = self.bounds.start.as_ref() {
-                writer.write_str(" (")?;
-                start.to_css(&mut writer)?;
-                writer.write_char(')')?;
-            }
-            if let Some(end) = self.bounds.end.as_ref() {
-                writer.write_str(" to (")?;
-                end.to_css(&mut writer)?;
-                writer.write_char(')')?;
-            }
+        if self.bounds.start.is_some() || self.bounds.end.is_some() {
+            dest.write_char(' ')?;
+            style_traits::ToCss::to_css(&self.bounds, &mut CssWriter::new(dest))?;
         }
         self.rules.read_with(guard).to_css_block(guard, dest)
     }
@@ -88,6 +79,28 @@ pub struct ScopeBounds {
     pub start: Option<SelectorList<SelectorImpl>>,
     /// End of the scope.
     pub end: Option<SelectorList<SelectorImpl>>,
+}
+
+impl style_traits::ToCss for ScopeBounds {
+    fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
+    where
+        W: Write,
+    {
+        if let Some(start) = self.start.as_ref() {
+            dest.write_char('(')?;
+            start.to_css(dest)?;
+            dest.write_char(')')?;
+        }
+        if let Some(end) = self.end.as_ref() {
+            if self.start.is_some() {
+                dest.write_char(' ')?;
+            }
+            dest.write_str("to (")?;
+            end.to_css(dest)?;
+            dest.write_char(')')?;
+        }
+        Ok(())
+    }
 }
 
 impl ScopeBounds {
@@ -162,7 +175,7 @@ impl ScopeBounds {
 }
 
 /// Types of implicit scope root.
-#[derive(Debug, Copy, Clone, MallocSizeOf)]
+#[derive(Debug, Copy, Clone, MallocSizeOf, PartialEq)]
 pub enum ImplicitScopeRoot {
     /// This implicit scope root is in the light tree.
     InLightTree(OpaqueElement),

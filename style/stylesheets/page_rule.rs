@@ -12,7 +12,7 @@ use crate::properties::PropertyDeclarationBlock;
 use crate::shared_lock::{
     DeepCloneWithLock, Locked, SharedRwLock, SharedRwLockReadGuard, ToCssWithGuard,
 };
-use crate::stylesheets::{CssRules, style_or_page_rule_to_css};
+use crate::stylesheets::CssRules;
 use crate::values::{AtomIdent, CustomIdent};
 use cssparser::{Parser, SourceLocation, Token, match_ignore_ascii_case};
 #[cfg(feature = "gecko")]
@@ -337,7 +337,17 @@ impl ToCssWithGuard for PageRule {
             self.selectors.to_css(&mut CssWriter::new(dest))?;
             dest.write_char(' ')?;
         }
-        style_or_page_rule_to_css(Some(&self.rules), &self.block, guard, dest)
+        dest.write_char('{')?;
+        let declarations = self.block.read_with(guard);
+        if !declarations.declarations().is_empty() {
+            dest.write_char(' ')?;
+            declarations.to_css(dest)?;
+        }
+        for rule in self.rules.read_with(guard).0.iter() {
+            dest.write_char(' ')?;
+            rule.to_css(guard, dest)?;
+        }
+        dest.write_str(" }")
     }
 }
 

@@ -427,7 +427,24 @@ impl NonCustomPropertyId {
     }
 
     pub(super) fn allowed_in(self, context: &ParserContext) -> bool {
-        if !self.allowed_in_rule(context.rule_types()) {
+        let mut rule_types = context.rule_types();
+        // Margin boxes take the properties of other boxes, not the @page descriptors.
+        if rule_types.contains(CssRuleType::Margin) {
+            rule_types = CssRuleType::Style.into();
+        }
+        // Keyframes, @page and @position-try can't contain style or scope rules, so when
+        // we're inside one of them, its own restrictions apply rather than those of the
+        // rules around it.
+        let restricted = CssRuleTypes::from_bits(
+            rule_types.bits()
+                & (CssRuleType::Keyframe.bit()
+                    | CssRuleType::Page.bit()
+                    | CssRuleType::PositionTry.bit()),
+        );
+        if !restricted.is_empty() {
+            rule_types = restricted;
+        }
+        if !self.allowed_in_rule(rule_types) {
             return false;
         }
 
@@ -2875,7 +2892,7 @@ macro_rules! longhand_properties_idents {
 #[cfg(feature = "gecko")]
 size_of_test!(ComputedValues, 248);
 #[cfg(feature = "servo")]
-size_of_test!(ComputedValues, 240);
+size_of_test!(ComputedValues, 248);
 
 // FFI relies on this.
 size_of_test!(Option<Arc<ComputedValues>>, 8);

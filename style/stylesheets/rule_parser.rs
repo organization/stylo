@@ -279,7 +279,7 @@ impl AtRuleType {
             "font-face" => Self::FontFace,
             "font-feature-values" => Self::FontFeatureValues,
             "font-palette-values" if crate::pref!("layout.css.font-palette.enabled", gecko = true) => Self::FontPaletteValues,
-            "counter-style" if cfg!(feature = "gecko") => Self::CounterStyle,
+            "counter-style" if crate::pref!("layout.css.counter-style-rule.enabled", gecko = true) => Self::CounterStyle,
             "media" => Self::Media,
             "custom-media" if crate::pref!("layout.css.custom-media.enabled") => Self::CustomMedia,
             "container" if crate::pref!("layout.css.container-queries.enabled", gecko = true) => Self::Container,
@@ -299,8 +299,8 @@ impl AtRuleType {
             "position-try" if crate::pref!("layout.css.anchor-positioning.enabled", gecko = true) => Self::PositionTry,
             "view-transition" if crate::pref!("dom.viewTransitions.cross-document.enabled") => Self::ViewTransition,
             _ => {
-                // The margin at-rules supported within @page.
-                if cfg!(feature = "gecko") && crate::pref!("layout.css.margin-rules.enabled")
+                // The margin at-rules supported within @page, which are unknown elsewhere.
+                if crate::pref!("layout.css.margin-rules.enabled") && context.in_page_rule()
                     && let Some(rule_type) = MarginRuleType::from_name(name) {
                         return Some(Self::Margin(rule_type));
                     }
@@ -353,6 +353,7 @@ pub enum AtRulePrelude {
         Arc<Locked<MediaList>>,
         Option<ImportSupportsCondition>,
         ImportLayer,
+        Option<ScopeBounds>,
     ),
     /// A @margin rule prelude.
     Margin(MarginRuleType),
@@ -426,13 +427,13 @@ impl<'a, 'i> AtRuleParser<'i> for TopLevelRuleParser<'a, 'i> {
                 let url =
                     CssUrl::new_from_untainted_string(url_string, &self.context, CorsMode::None);
 
-                let (layer, supports) =
-                    ImportRule::parse_layer_and_supports(input, &mut self.context);
+                let (layer, scope, supports) =
+                    ImportRule::parse_layer_scope_and_supports(input, &mut self.context);
 
                 let media = MediaList::parse(&mut self.context, input);
                 let media = Arc::new(self.shared_lock.wrap(media));
 
-                return Ok(AtRulePrelude::Import(url, media, supports, layer));
+                return Ok(AtRulePrelude::Import(url, media, supports, layer, scope));
             },
             AtRuleType::Namespace => {
                 if !self.check_state(State::Namespaces) {
@@ -503,7 +504,7 @@ impl<'a, 'i> AtRuleParser<'i> for TopLevelRuleParser<'a, 'i> {
         start: &ParserState,
     ) -> Result<Self::AtRule, ()> {
         match prelude {
-            AtRulePrelude::Import(url, media, supports, layer) => {
+            AtRulePrelude::Import(url, media, supports, layer, scope) => {
                 let loader = self
                     .loader
                     .expect("Expected a stylesheet loader for @import");
@@ -515,6 +516,7 @@ impl<'a, 'i> AtRuleParser<'i> for TopLevelRuleParser<'a, 'i> {
                     media,
                     supports,
                     layer,
+                    scope,
                 );
 
                 self.state = State::Imports;
@@ -860,6 +862,14 @@ impl<'a, 'i> NestedRuleParser<'a, 'i> {
         if wants_first_declaration_block {
             debug_assert!(parser.first_declaration_block.is_empty(), "How?");
             parser.first_declaration_block = declarations;
+        } else if parser.in_page_rule() {
+            // An @page rule has a single declaration block, so the declarations
+            // that follow its margin rules join it.
+            for (declaration, importance) in declarations.declaration_importance_iter() {
+                parser
+                    .first_declaration_block
+                    .push(declaration.clone(), importance);
+            }
         } else {
             let nested_rule = CssRule::NestedDeclarations(Arc::new(parser.shared_lock.wrap(
                 NestedDeclarationsRule {

@@ -1041,7 +1041,8 @@ class PropertiesData(object):
         logical_longhands = []
         other_longhands = []
         for p in self.longhands:
-            if p.name in ["direction", "unicode-bidi"]:
+            # Outside of @page, size is a shorthand for width and height.
+            if p.name in ["direction", "unicode-bidi", "size"]:
                 continue
             if not p.enabled_in_content() and not p.experimental(self.engine):
                 continue
