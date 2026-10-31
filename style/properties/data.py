@@ -659,6 +659,7 @@ class Longhand(Property):
                 "PositionArea",
                 "PositionAreaKeyword",
                 "PositionProperty",
+                "ReadingFlow",
                 "ContentDistribution",
                 "ItemPlacement",
                 "SelfAlignment",
