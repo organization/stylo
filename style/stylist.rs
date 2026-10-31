@@ -5054,6 +5054,16 @@ impl Rule {
         {
             return false;
         }
+        // The bucket can account for the pseudo-element compound, which then never reaches the
+        // check in `matches_complex_selector`.
+        if self.bucket_matches != BucketMatches::Unknown
+            && context.matching_mode() == MatchingMode::ForStatelessPseudoElement
+            && let Some(matches_pseudo) = context.pseudo_element_matching_fn
+            && let Some(pseudo) = self.selector.pseudo_element()
+            && !matches_pseudo(pseudo)
+        {
+            return false;
+        }
         if self.bucket_matches == BucketMatches::Full {
             return true;
         }
