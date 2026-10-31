@@ -8,7 +8,7 @@
 use crate::Zero;
 use crate::derives::*;
 use crate::values::animated::{Animate, Procedure, ToAnimatedZero, lists};
-use crate::values::computed::Percentage;
+use crate::values::computed::{Context, Percentage, ToComputedValue};
 use crate::values::distance::{ComputeSquaredDistance, SquaredDistance};
 use crate::values::generics::{
     NonNegative, Optional, border::GenericBorderRadius, position::GenericPositionOrAuto, rect::Rect,
@@ -487,7 +487,6 @@ pub enum FillRule {
     Serialize,
     SpecifiedValueInfo,
     ToAnimatedValue,
-    ToComputedValue,
     ToCss,
     ToResolvedValue,
     ToShmem,
@@ -507,6 +506,23 @@ impl Path {
     #[inline]
     pub fn commands(&self) -> &[PathCommand] {
         self.path.commands()
+    }
+}
+
+/// The computed path has every command made absolute.
+/// <https://drafts.csswg.org/css-shapes-1/#basic-shape-computed-values>
+impl ToComputedValue for Path {
+    type ComputedValue = Self;
+
+    fn to_computed_value(&self, _: &Context) -> Self {
+        Self {
+            fill: self.fill,
+            path: self.path.normalize(false),
+        }
+    }
+
+    fn from_computed_value(computed: &Self) -> Self {
+        computed.clone()
     }
 }
 
@@ -844,7 +860,6 @@ pub enum GenericShapeCommand<Angle, AxisPosition, Position, LengthPercentage> {
 }
 
 pub use self::GenericShapeCommand as ShapeCommand;
-
 
 impl<Angle, AxisPosition, Position, LengthPercentage> ToCss
     for ShapeCommand<Angle, AxisPosition, Position, LengthPercentage>
