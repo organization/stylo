@@ -562,7 +562,7 @@ pub struct ScopedNameList(
     /// `none | all | <dashed-ident>#`
     #[css(iterable, if_empty = "none")]
     #[ignore_malloc_size_of = "Arc"]
-    crate::ArcSlice<AtomIdent>,
+    pub crate::ArcSlice<AtomIdent>,
 );
 
 impl ScopedNameList {

@@ -608,7 +608,6 @@ pub enum AllowAnchorPosResolutionInCalcPercentage {
 }
 
 impl AllowAnchorPosResolutionInCalcPercentage {
-    #[cfg(feature = "gecko")]
     /// Get the `anchor-size()` resolution axis.
     pub fn to_axis(&self) -> PhysicalAxis {
         match self {
@@ -784,6 +783,74 @@ impl CalcLengthPercentage {
         node.map_node(|node| resolve_anchor_functions(node, allowed, params))?;
         Ok((node, self.clamping_mode))
     }
+
+    /// Return a copy of this value with every `anchor()` and `anchor-size()` function replaced by
+    /// the length that `resolver` gives for it, or by its fallback. Returns an error when a
+    /// function resolves to nothing and has no fallback, which makes the declaration invalid at
+    /// computed-value time.
+    #[cfg(feature = "servo")]
+    pub fn resolve_anchor_with(
+        &self,
+        allowed: AllowAnchorPosResolutionInCalcPercentage,
+        resolver: &mut dyn AnchorResolver,
+    ) -> Result<LengthPercentage, ()> {
+        fn resolve(
+            node: &CalcNode,
+            allowed: AllowAnchorPosResolutionInCalcPercentage,
+            resolver: &mut dyn AnchorResolver,
+        ) -> Result<Option<CalcNode>, ()> {
+            let (resolved, fallback) = match node {
+                CalcNode::Anchor(f) => {
+                    let AllowAnchorPosResolutionInCalcPercentage::Both(side) = allowed else {
+                        return Err(());
+                    };
+                    let resolved = if f.side.valid_for(side) {
+                        resolver.anchor(&f.target_element, &(&f.side).into(), side)
+                    } else {
+                        None
+                    };
+                    (resolved, f.fallback.as_ref())
+                },
+                CalcNode::AnchorSize(f) => (
+                    resolver.anchor_size(&f.target_element, f.size, allowed.to_axis()),
+                    f.fallback.as_ref(),
+                ),
+                _ => return Ok(None),
+            };
+            if let Some(length) = resolved {
+                return Ok(Some(CalcNode::Leaf(ComputedLeaf::Length(length))));
+            }
+            let mut node = fallback.ok_or(())?.node.clone();
+            node.map_node(|node| resolve(node, allowed, resolver))?;
+            Ok(Some(node))
+        }
+
+        let mut node = self.node.clone();
+        node.map_node(|node| resolve(node, allowed, resolver))?;
+        Ok(LengthPercentage::new_calc(node, self.clamping_mode))
+    }
+}
+
+/// Answers the queries that `anchor()` and `anchor-size()` make at layout time.
+#[cfg(feature = "servo")]
+pub trait AnchorResolver {
+    /// The inset that lines up the `property` edge of the inset-modified containing block with
+    /// `side` of the anchor that `name` finds, if it exists.
+    fn anchor(
+        &mut self,
+        name: &crate::values::generics::position::TreeScoped<crate::values::DashedIdent>,
+        side: &AnchorSide,
+        property: PhysicalSide,
+    ) -> Option<Length>;
+
+    /// The size of the anchor that `name` finds in the axis that `size` names, or in `axis` when
+    /// `size` names none.
+    fn anchor_size(
+        &mut self,
+        name: &crate::values::generics::position::TreeScoped<crate::values::DashedIdent>,
+        size: crate::values::generics::length::AnchorSizeKeyword,
+        axis: PhysicalAxis,
+    ) -> Option<Length>;
 }
 
 // NOTE(emilio): We don't compare `clamping_mode` since we want to preserve the
