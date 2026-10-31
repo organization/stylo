@@ -724,6 +724,21 @@ pub trait TElement:
     /// native anonymous content can opt out of this style fixup.)
     fn skip_item_display_fixup(&self) -> bool;
 
+    /// Whether this element is a canvas whose children are laid out as
+    /// drawable content, so that they get blockified and statically
+    /// positioned.
+    /// <https://github.com/WICG/html-in-canvas>
+    fn is_drawable_canvas(&self) -> bool {
+        false
+    }
+
+    /// Whether this element is a drawable element of a canvas whose children
+    /// are drawable content, which implies `isolation: isolate`.
+    /// <https://github.com/WICG/html-in-canvas>
+    fn is_drawable_element(&self) -> bool {
+        false
+    }
+
     /// Element has a flag that represents whether the element may have any type
     /// of animations or not to bail out animation stuff early.
     fn may_have_animations(&self) -> bool;

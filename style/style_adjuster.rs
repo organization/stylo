@@ -19,6 +19,7 @@ use crate::properties::longhands::{
     content_visibility::computed_value::T as ContentVisibility,
 };
 use crate::properties::{ComputedValues, LonghandIdSet, StyleBuilder};
+use crate::values::computed::Isolation;
 use crate::values::computed::position::{
     PositionTryFallbacksTryTactic, PositionTryFallbacksTryTacticKeyword, TryTacticAdjustment,
 };
@@ -207,6 +208,48 @@ impl<'a, 'b: 'a> StyleAdjuster<'a, 'b> {
         }
 
         element.is_some_and(|e| e.skip_item_display_fixup())
+    }
+
+    /// Flag the style of a canvas whose children are drawable content, and
+    /// blockify and statically position the children of such a canvas.
+    /// <https://github.com/WICG/html-in-canvas>
+    fn adjust_for_drawable_canvas<E>(
+        &mut self,
+        layout_parent_style: &ComputedValues,
+        element: Option<E>,
+    ) where
+        E: TElement,
+    {
+        if self.style.pseudo.is_some() {
+            return;
+        }
+        let Some(element) = element else {
+            return;
+        };
+        if element.is_drawable_canvas() {
+            self.style.add_flags(ComputedValueFlags::IS_DRAWABLE_CANVAS);
+        }
+        if element.is_drawable_element()
+            && *self.style.get_box().get_isolation() != Isolation::Isolate
+        {
+            self.style.mutate_box().set_isolation(Isolation::Isolate);
+        }
+        if !layout_parent_style
+            .flags
+            .contains(ComputedValueFlags::IS_DRAWABLE_CANVAS)
+        {
+            return;
+        }
+        if *self.style.get_box().get_position() != Position::Static {
+            self.style.mutate_box().set_position(Position::Static);
+        }
+        let display = *self.style.get_box().get_display();
+        let blockified_display = display.equivalent_block_display(false);
+        if display != blockified_display {
+            self.style
+                .mutate_box()
+                .set_adjusted_display(blockified_display, false);
+        }
     }
 
     /// Apply the blockification rules based on the table in CSS 2.2 section 9.7.
@@ -1074,6 +1117,7 @@ impl<'a, 'b: 'a> StyleAdjuster<'a, 'b> {
             self.adjust_for_text_control_editing_root();
         }
         self.adjust_for_top_layer();
+        self.adjust_for_drawable_canvas(layout_parent_style, element);
         self.blockify_if_necessary(layout_parent_style, element);
         self.adjust_for_webkit_line_clamp();
         self.adjust_for_position();
