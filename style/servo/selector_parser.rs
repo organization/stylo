@@ -419,7 +419,8 @@ impl ::selectors::parser::PseudoElement for PseudoElement {
         self.is_in_pseudo_element_tree()
             || matches!(
                 self,
-                Self::FileSelectorButton
+                Self::DetailsContent
+                    | Self::FileSelectorButton
                     | Self::ScrollButton(..)
                     | Self::Placeholder
                     | Self::ColorSwatch

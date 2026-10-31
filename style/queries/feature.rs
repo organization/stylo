@@ -105,9 +105,9 @@ macro_rules! keyword_evaluator {
 /// Different flags or toggles that change how a expression is parsed or
 /// evaluated.
 #[derive(Clone, Copy, Debug, Eq, MallocSizeOf, PartialEq, ToShmem)]
-pub struct FeatureFlags(u8);
+pub struct FeatureFlags(u16);
 bitflags! {
-    impl FeatureFlags : u8 {
+    impl FeatureFlags : u16 {
         /// The feature should only be parsed in chrome and ua sheets.
         const CHROME_AND_UA_ONLY = 1 << 0;
         /// The feature requires a -webkit- prefix.
@@ -124,6 +124,11 @@ bitflags! {
         const VIEWPORT_DEPENDENT = 1 << 6;
         /// The feature evaluation depends on style queries.
         const STYLE = 1 << 7;
+        /// The feature requires a scroll-state container.
+        const CONTAINER_REQUIRES_SCROLL_STATE = 1 << 8;
+        /// The query has a `<general-enclosed>` term that substitution can't
+        /// turn into a known feature.
+        const UNKNOWN = 1 << 9;
     }
 }
 

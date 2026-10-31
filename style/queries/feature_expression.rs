@@ -33,13 +33,15 @@ use std::cmp::Ordering;
 use std::fmt::{self, Write};
 use style_traits::{CssWriter, ParseError, ParsingMode, StyleParseErrorKind, ToCss};
 
-/// Whether we're parsing a media or container query feature.
+/// Whether we're parsing a media, container or scroll-state query feature.
 #[derive(Clone, Copy, Debug, Eq, MallocSizeOf, PartialEq, ToShmem)]
 pub enum FeatureType {
     /// We're parsing a media feature.
     Media,
     /// We're parsing a container feature.
     Container,
+    /// We're parsing a feature inside a container scroll-state() query.
+    ScrollState,
 }
 
 impl FeatureType {
@@ -49,11 +51,12 @@ impl FeatureType {
         #[cfg(feature = "servo")]
         use crate::servo::media_features::MEDIA_FEATURES;
 
-        use crate::stylesheets::container_rule::CONTAINER_FEATURES;
+        use crate::stylesheets::container_rule::{CONTAINER_FEATURES, SCROLL_STATE_FEATURES};
 
         match *self {
             FeatureType::Media => &MEDIA_FEATURES,
             FeatureType::Container => &CONTAINER_FEATURES,
+            FeatureType::ScrollState => &SCROLL_STATE_FEATURES,
         }
     }
 
@@ -277,7 +280,18 @@ impl ToCss for QueryFeatureExpression {
         W: fmt::Write,
     {
         dest.write_char('(')?;
+        self.to_css_without_parens(dest)?;
+        dest.write_char(')')
+    }
+}
 
+impl QueryFeatureExpression {
+    /// Serializes the expression without the surrounding parentheses, as it
+    /// appears directly inside a `scroll-state()` function.
+    pub fn to_css_without_parens<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
+    where
+        W: fmt::Write,
+    {
         match self.kind {
             QueryFeatureExpressionKind::Empty => self.write_name(dest)?,
             QueryFeatureExpressionKind::Single(ref v)
@@ -305,7 +319,7 @@ impl ToCss for QueryFeatureExpression {
                 }
             },
         }
-        dest.write_char(')')
+        Ok(())
     }
 }
 

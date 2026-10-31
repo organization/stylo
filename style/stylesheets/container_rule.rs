@@ -8,7 +8,7 @@
 
 use crate::computed_value_flags::ComputedValueFlags;
 use crate::dom::{AttributeTracker, TElement};
-use crate::logical_geometry::{LogicalSize, WritingMode};
+use crate::logical_geometry::{LogicalSize, PhysicalSide, WritingMode};
 use crate::parser::ParserContext;
 use crate::properties::ComputedValues;
 use crate::queries::feature::{AllowsRanges, Evaluator, FeatureFlags, QueryFeatureDescription};
@@ -261,6 +261,14 @@ impl ContainerCondition {
             return TraversalResult::InProgress;
         }
 
+        if self
+            .flags
+            .contains(FeatureFlags::CONTAINER_REQUIRES_SCROLL_STATE)
+            && !container_type.intersects(ContainerType::SCROLL_STATE)
+        {
+            return TraversalResult::InProgress;
+        }
+
         // Filter by container-name.
         let container_name = box_style.get_container_name();
         for filter_name in self.name.0.iter() {
@@ -270,11 +278,17 @@ impl ContainerCondition {
         }
 
         let size = potential_container.query_container_size(box_style.get_display());
+        let scroll_state = if container_type.intersects(ContainerType::SCROLL_STATE) {
+            potential_container.query_scroll_state()
+        } else {
+            ContainerScrollState::empty()
+        };
         let style = style.to_arc();
         TraversalResult::Done(ContainerLookupResult {
             element: potential_container,
             info: ContainerInfo {
                 size,
+                scroll_state,
                 wm,
                 inherited_style: {
                     potential_container.traversal_parent().and_then(|parent| {
@@ -318,6 +332,11 @@ impl ContainerCondition {
     where
         E: TElement,
     {
+        // A query with an unknown feature selects no container, so it never
+        // matches.
+        if self.flags.contains(FeatureFlags::UNKNOWN) {
+            return KleeneValue::False;
+        }
         let result = self.find_container(element, originating_element_style);
         let condition = match self.condition {
             Some(ref c) => c,
@@ -416,10 +435,53 @@ impl ContainerCondition {
     }
 }
 
+/// The state of a scroll-state container, in physical directions.
+///
+/// https://drafts.csswg.org/css-conditional-5/#scroll-state-container
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct ContainerScrollState(u16);
+bitflags! {
+    impl ContainerScrollState: u16 {
+        /// The container can be scrolled towards its top edge.
+        const SCROLLABLE_TOP = 1 << 0;
+        /// The container can be scrolled towards its right edge.
+        const SCROLLABLE_RIGHT = 1 << 1;
+        /// The container can be scrolled towards its bottom edge.
+        const SCROLLABLE_BOTTOM = 1 << 2;
+        /// The container can be scrolled towards its left edge.
+        const SCROLLABLE_LEFT = 1 << 3;
+        /// The most recent relative vertical scroll went towards the top.
+        const SCROLLED_TOP = 1 << 4;
+        /// The most recent relative horizontal scroll went towards the right.
+        const SCROLLED_RIGHT = 1 << 5;
+        /// The most recent relative vertical scroll went towards the bottom.
+        const SCROLLED_BOTTOM = 1 << 6;
+        /// The most recent relative horizontal scroll went towards the left.
+        const SCROLLED_LEFT = 1 << 7;
+        /// The sticky container is stuck to the top edge of its scroller.
+        const STUCK_TOP = 1 << 8;
+        /// The sticky container is stuck to the right edge of its scroller.
+        const STUCK_RIGHT = 1 << 9;
+        /// The sticky container is stuck to the bottom edge of its scroller.
+        const STUCK_BOTTOM = 1 << 10;
+        /// The sticky container is stuck to the left edge of its scroller.
+        const STUCK_LEFT = 1 << 11;
+        /// The container is snapped in the horizontal axis.
+        const SNAPPED_X = 1 << 12;
+        /// The container is snapped in the vertical axis.
+        const SNAPPED_Y = 1 << 13;
+    }
+}
+
+const SCROLLABLE_SHIFT: u16 = 0;
+const SCROLLED_SHIFT: u16 = 4;
+const STUCK_SHIFT: u16 = 8;
+
 /// Information needed to evaluate an individual container query.
 #[derive(Clone)]
 pub struct ContainerInfo {
     size: Size2D<Option<Au>>,
+    scroll_state: ContainerScrollState,
     wm: WritingMode,
     inherited_style: Option<Arc<ComputedValues>>,
 }
@@ -526,6 +588,159 @@ pub static CONTAINER_FEATURES: [QueryFeatureDescription; 6] = [
             FeatureFlags::CONTAINER_REQUIRES_BLOCK_AXIS.bits()
                 | FeatureFlags::CONTAINER_REQUIRES_INLINE_AXIS.bits()
         ),
+    ),
+];
+
+/// The value of the `scrollable` and `scrolled` scroll-state features.
+#[derive(Clone, Copy, Debug, FromPrimitive, Parse, ToCss)]
+#[repr(u8)]
+#[allow(missing_docs)]
+pub enum ScrollStateDirection {
+    None,
+    Top,
+    Right,
+    Bottom,
+    Left,
+    BlockStart,
+    InlineStart,
+    BlockEnd,
+    InlineEnd,
+    X,
+    Y,
+    Block,
+    Inline,
+}
+
+/// The value of the `stuck` scroll-state feature.
+#[derive(Clone, Copy, Debug, FromPrimitive, Parse, ToCss)]
+#[repr(u8)]
+#[allow(missing_docs)]
+pub enum ScrollStateStuck {
+    None,
+    Top,
+    Right,
+    Bottom,
+    Left,
+    BlockStart,
+    InlineStart,
+    BlockEnd,
+    InlineEnd,
+}
+
+/// The value of the `snapped` scroll-state feature.
+#[derive(Clone, Copy, Debug, FromPrimitive, Parse, ToCss)]
+#[repr(u8)]
+#[allow(missing_docs)]
+pub enum ScrollStateSnapped {
+    None,
+    X,
+    Y,
+    Block,
+    Inline,
+    Both,
+}
+
+fn scroll_state_sides(context: &Context, shift: u16) -> Option<(u16, WritingMode)> {
+    let info = context.container_info.as_ref()?;
+    Some(((info.scroll_state.bits() >> shift) & 0b1111, info.wm))
+}
+
+fn eval_sides(context: &Context, shift: u16, value: Option<ScrollStateDirection>) -> bool {
+    use ScrollStateDirection::*;
+    let Some((sides, wm)) = scroll_state_sides(context, shift) else {
+        return false;
+    };
+    let side = |side: PhysicalSide| sides & (1 << side as u16) != 0;
+    let Some(value) = value else {
+        return sides != 0;
+    };
+    match value {
+        None => sides == 0,
+        Top => side(PhysicalSide::Top),
+        Right => side(PhysicalSide::Right),
+        Bottom => side(PhysicalSide::Bottom),
+        Left => side(PhysicalSide::Left),
+        BlockStart => side(wm.block_start_physical_side()),
+        InlineStart => side(wm.inline_start_physical_side()),
+        BlockEnd => side(wm.block_end_physical_side()),
+        InlineEnd => side(wm.inline_end_physical_side()),
+        X => side(PhysicalSide::Left) || side(PhysicalSide::Right),
+        Y => side(PhysicalSide::Top) || side(PhysicalSide::Bottom),
+        Block => side(wm.block_start_physical_side()) || side(wm.block_end_physical_side()),
+        Inline => side(wm.inline_start_physical_side()) || side(wm.inline_end_physical_side()),
+    }
+}
+
+fn eval_scrollable(context: &Context, value: Option<ScrollStateDirection>) -> bool {
+    eval_sides(context, SCROLLABLE_SHIFT, value)
+}
+
+fn eval_scrolled(context: &Context, value: Option<ScrollStateDirection>) -> bool {
+    eval_sides(context, SCROLLED_SHIFT, value)
+}
+
+fn eval_stuck(context: &Context, value: Option<ScrollStateStuck>) -> bool {
+    let value = value.map(|value| match value {
+        ScrollStateStuck::None => ScrollStateDirection::None,
+        ScrollStateStuck::Top => ScrollStateDirection::Top,
+        ScrollStateStuck::Right => ScrollStateDirection::Right,
+        ScrollStateStuck::Bottom => ScrollStateDirection::Bottom,
+        ScrollStateStuck::Left => ScrollStateDirection::Left,
+        ScrollStateStuck::BlockStart => ScrollStateDirection::BlockStart,
+        ScrollStateStuck::InlineStart => ScrollStateDirection::InlineStart,
+        ScrollStateStuck::BlockEnd => ScrollStateDirection::BlockEnd,
+        ScrollStateStuck::InlineEnd => ScrollStateDirection::InlineEnd,
+    });
+    eval_sides(context, STUCK_SHIFT, value)
+}
+
+fn eval_snapped(context: &Context, value: Option<ScrollStateSnapped>) -> bool {
+    let Some(info) = context.container_info.as_ref() else {
+        return false;
+    };
+    let x = info.scroll_state.contains(ContainerScrollState::SNAPPED_X);
+    let y = info.scroll_state.contains(ContainerScrollState::SNAPPED_Y);
+    let (inline, block) = if info.wm.is_vertical() {
+        (y, x)
+    } else {
+        (x, y)
+    };
+    match value {
+        Option::None => x || y,
+        Some(ScrollStateSnapped::None) => !x && !y,
+        Some(ScrollStateSnapped::X) => x,
+        Some(ScrollStateSnapped::Y) => y,
+        Some(ScrollStateSnapped::Block) => block,
+        Some(ScrollStateSnapped::Inline) => inline,
+        Some(ScrollStateSnapped::Both) => x && y,
+    }
+}
+
+/// https://drafts.csswg.org/css-conditional-5/#scroll-state-container
+pub static SCROLL_STATE_FEATURES: [QueryFeatureDescription; 4] = [
+    feature!(
+        atom!("stuck"),
+        AllowsRanges::No,
+        keyword_evaluator!(eval_stuck, ScrollStateStuck),
+        FeatureFlags::CONTAINER_REQUIRES_SCROLL_STATE,
+    ),
+    feature!(
+        atom!("snapped"),
+        AllowsRanges::No,
+        keyword_evaluator!(eval_snapped, ScrollStateSnapped),
+        FeatureFlags::CONTAINER_REQUIRES_SCROLL_STATE,
+    ),
+    feature!(
+        atom!("scrollable"),
+        AllowsRanges::No,
+        keyword_evaluator!(eval_scrollable, ScrollStateDirection),
+        FeatureFlags::CONTAINER_REQUIRES_SCROLL_STATE,
+    ),
+    feature!(
+        atom!("scrolled"),
+        AllowsRanges::No,
+        keyword_evaluator!(eval_scrolled, ScrollStateDirection),
+        FeatureFlags::CONTAINER_REQUIRES_SCROLL_STATE,
     ),
 ];
 

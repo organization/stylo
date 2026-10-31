@@ -663,6 +663,64 @@ impl ToCss for MozPrefFeature {
     }
 }
 
+/// The argument of a `scroll-state()` container query.
+///
+/// https://drafts.csswg.org/css-conditional-5/#typedef-scroll-state-query
+#[derive(Clone, Debug, MallocSizeOf, PartialEq, ToShmem)]
+pub enum ScrollStateQuery {
+    /// A single feature that is not wrapped in parentheses.
+    Feature(QueryFeatureExpression),
+    /// A condition made of features in parentheses.
+    Condition(QueryCondition),
+}
+
+impl ToCss for ScrollStateQuery {
+    fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
+    where
+        W: fmt::Write,
+    {
+        match *self {
+            Self::Feature(ref f) => f.to_css_without_parens(dest),
+            Self::Condition(ref c) => c.to_css(dest),
+        }
+    }
+}
+
+impl ScrollStateQuery {
+    fn enabled(feature_type: FeatureType) -> bool {
+        crate::pref!("layout.css.scroll-state.enabled") && feature_type == FeatureType::Container
+    }
+
+    fn parse(context: &ParserContext, input: &mut Parser) -> Result<Self, ParseError> {
+        if let Ok(feature) = input.try_parse(|input| {
+            QueryFeatureExpression::parse_in_parenthesis_block(
+                context,
+                input,
+                FeatureType::ScrollState,
+            )
+        }) {
+            return Ok(Self::Feature(feature));
+        }
+        Ok(Self::Condition(QueryCondition::parse(
+            context,
+            input,
+            FeatureType::ScrollState,
+        )?))
+    }
+
+    fn matches(
+        &self,
+        context: &computed::Context,
+        custom: &mut CustomMediaEvaluator,
+        attribute_tracker: &mut AttributeTracker,
+    ) -> KleeneValue {
+        match *self {
+            Self::Feature(ref f) => f.matches(context),
+            Self::Condition(ref c) => c.matches(context, custom, attribute_tracker),
+        }
+    }
+}
+
 /// Represents a condition.
 #[derive(Clone, Debug, MallocSizeOf, PartialEq, ToShmem)]
 pub enum QueryCondition {
@@ -678,6 +736,8 @@ pub enum QueryCondition {
     InParens(Box<QueryCondition>),
     /// A <style> query.
     Style(StyleQuery),
+    /// A scroll-state() query.
+    ScrollState(Box<ScrollStateQuery>),
     /// A -moz-pref() query.
     MozPref(MozPrefFeature),
     /// [ <function-token> <any-value>? ) ] | [ ( <any-value>? ) ]
@@ -709,6 +769,11 @@ impl ToCss for QueryCondition {
             },
             Self::Style(ref c) => {
                 dest.write_str("style(")?;
+                c.to_css(dest)?;
+                dest.write_char(')')
+            },
+            Self::ScrollState(ref c) => {
+                dest.write_str("scroll-state(")?;
                 c.to_css(dest)?;
                 dest.write_char(')')
             },
@@ -758,6 +823,7 @@ impl QueryCondition {
             | Self::Feature(..)
             | Self::GeneralEnclosed(..)
             | Self::Style(..)
+            | Self::ScrollState(..)
             | Self::MozPref(..) => {},
             Self::Not(ref cond) => cond.visit(visitor),
             Self::Operation(ref conds, _op) => {
@@ -775,6 +841,7 @@ impl QueryCondition {
         let mut result = FeatureFlags::empty();
         self.visit(&mut |condition| match condition {
             Self::Style(..) => result.insert(FeatureFlags::STYLE),
+            Self::ScrollState(..) => result.insert(FeatureFlags::CONTAINER_REQUIRES_SCROLL_STATE),
             Self::Feature(f) => result.insert(f.feature_flags()),
             Self::GeneralEnclosed(_, _, flags) => result.insert(*flags),
             _ => {},
@@ -837,6 +904,7 @@ impl QueryCondition {
             Self::InParens(ref c) => c.matches(context, custom, attribute_tracker),
             Self::Not(ref c) => !c.matches(context, custom, attribute_tracker),
             Self::Style(ref c) => c.matches(context, attribute_tracker),
+            Self::ScrollState(ref c) => c.matches(context, custom, attribute_tracker),
             Self::MozPref(ref c) => c.matches(context),
             Self::Operation(ref conditions, op) => {
                 debug_assert!(!conditions.is_empty(), "We never create an empty op");
@@ -973,6 +1041,14 @@ impl OperationParser for QueryCondition {
                         }
                         flags.insert(FeatureFlags::STYLE);
                     },
+                    "scroll-state" if ScrollStateQuery::enabled(feature_type) => {
+                        let query = try_parse_block(context, input, start, start_location, |input| {
+                            ScrollStateQuery::parse(context, input)
+                        });
+                        if let Some(query) = query {
+                            return Ok(Self::ScrollState(Box::new(query)));
+                        }
+                    },
                     "-moz-pref" => {
                         let feature = try_parse_block(context, input, start, start_location, |input| {
                             MozPrefFeature::parse(context, input, feature_type)
@@ -987,8 +1063,19 @@ impl OperationParser for QueryCondition {
             _ => return Err(ParseError::unexpected_token()),
         }
         input.parse_nested_block(consume_any_value)?;
+        let text = input.slice_from(start);
+        if feature_type == FeatureType::Container
+            && !custom_properties::SpecifiedValue::parse(
+                &mut Parser::new(text),
+                None,
+                &context.url_data,
+            )
+            .is_ok_and(|value| value.has_references())
+        {
+            flags.insert(FeatureFlags::UNKNOWN);
+        }
         Ok(Self::GeneralEnclosed(
-            input.slice_from(start).to_owned(),
+            text.to_owned(),
             context.url_data.clone(),
             flags,
         ))

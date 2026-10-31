@@ -241,14 +241,21 @@ fn eval_font_tech(flag: &FontFaceSourceTechFlags) -> bool {
     unsafe { bindings::Gecko_IsFontTechSupported(*flag) }
 }
 
+/// The embedder lists the formats it can load as a bit set of format
+/// keywords.
 #[cfg(feature = "servo")]
-fn eval_font_format(_: &FontFaceSourceFormatKeyword) -> bool {
-    false
+fn eval_font_format(kw: &FontFaceSourceFormatKeyword) -> bool {
+    crate::pref!("layout.css.supported-font-formats") & (1 << *kw as u8) != 0
 }
 
+/// The embedder lists the technologies it supports as a set of
+/// FontFaceSourceTechFlags bits.
 #[cfg(feature = "servo")]
-fn eval_font_tech(_: &FontFaceSourceTechFlags) -> bool {
-    false
+fn eval_font_tech(flag: &FontFaceSourceTechFlags) -> bool {
+    FontFaceSourceTechFlags::from_bits_truncate(
+        crate::pref!("layout.css.supported-font-techs") as u16
+    )
+    .contains(*flag)
 }
 
 /// supports_condition | declaration

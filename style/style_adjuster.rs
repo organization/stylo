@@ -304,6 +304,14 @@ impl<'a, 'b: 'a> StyleAdjuster<'a, 'b> {
             self.style
                 .add_flags(ComputedValueFlags::SELF_OR_ANCESTOR_HAS_SIZE_CONTAINER_TYPE);
         }
+
+        if box_style
+            .get_container_type()
+            .intersects(crate::values::computed::ContainerType::SCROLL_STATE)
+        {
+            self.style
+                .add_flags(ComputedValueFlags::SELF_OR_ANCESTOR_HAS_SCROLL_STATE_CONTAINER_TYPE);
+        }
     }
 
     /// Adjust the style for text style.

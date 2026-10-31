@@ -724,7 +724,7 @@ pub trait TElement:
     /// native anonymous content can opt out of this style fixup.)
     fn skip_item_display_fixup(&self) -> bool;
 
-    /// Element has a flag that represents whether the element may have any type 
+    /// Element has a flag that represents whether the element may have any type
     /// of animations or not to bail out animation stuff early.
     fn may_have_animations(&self) -> bool;
 
@@ -937,6 +937,12 @@ pub trait TElement:
         &self,
         display: &Display,
     ) -> euclid::default::Size2D<Option<app_units::Au>>;
+
+    /// Returns the scroll state of the element to be used in scroll-state
+    /// container queries.
+    fn query_scroll_state(&self) -> crate::stylesheets::container_rule::ContainerScrollState {
+        Default::default()
+    }
 
     /// Returns true if the element has all of specified selector flags.
     fn has_selector_flags(&self, flags: ElementSelectorFlags) -> bool;
