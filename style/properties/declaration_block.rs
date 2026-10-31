@@ -20,7 +20,7 @@ use crate::dom::{AttributeTracker, DummyElementContext};
 use crate::error_reporting::{ContextualParseError, ParseErrorReporter};
 use crate::parser::ParserContext;
 use crate::properties::{
-    StyleBuilder,
+    LonghandId, StyleBuilder,
     animated_properties::{AnimationValue, AnimationValueMap},
 };
 use crate::rule_cache::RuleCacheConditions;
@@ -51,6 +51,8 @@ use style_traits::{
     CssString, CssStringWriter, CssWriter, ParseError, ParsingMode, StyleParseErrorKind, ToCss,
 };
 use thin_vec::ThinVec;
+
+const SIZE_LONGHANDS: [LonghandId; 2] = [LonghandId::Width, LonghandId::Height];
 
 /// A set of property declarations including animations and transitions.
 #[derive(Default)]
@@ -580,6 +582,10 @@ impl PropertyDeclarationBlock {
     ) -> fmt::Result {
         // Step 1.1: done when parsing a string to PropertyId
 
+        if self.is_size_shorthand(property) {
+            return self.size_shorthand_to_css(dest);
+        }
+
         // Step 1.2
         let longhand_or_custom = match property.as_shorthand() {
             Ok(shorthand) => return self.shorthand_to_css(shorthand, dest),
@@ -598,6 +604,18 @@ impl PropertyDeclarationBlock {
     /// <https://drafts.csswg.org/cssom/#dom-cssstyledeclaration-getpropertypriority>
     pub fn property_priority(&self, property: &PropertyId) -> Importance {
         // Step 1: done when parsing a string to PropertyId
+
+        if self.is_size_shorthand(property) {
+            let important = SIZE_LONGHANDS.iter().all(|longhand| {
+                self.get(PropertyDeclarationId::Longhand(*longhand))
+                    .is_some_and(|(_, importance)| importance.important())
+            });
+            return if important {
+                Importance::Important
+            } else {
+                Importance::Normal
+            };
+        }
 
         // Step 2
         match property.as_shorthand() {
@@ -918,6 +936,13 @@ impl PropertyDeclarationBlock {
     /// `property`.
     #[inline]
     pub fn first_declaration_to_remove(&self, property: &PropertyId) -> Option<usize> {
+        if self.is_size_shorthand(property) {
+            return self.declarations.iter().position(|declaration| {
+                SIZE_LONGHANDS
+                    .iter()
+                    .any(|longhand| declaration.id() == PropertyDeclarationId::Longhand(*longhand))
+            });
+        }
         if let Err(longhand_or_custom) = property.as_shorthand()
             && !self.contains(longhand_or_custom)
         {
@@ -951,6 +976,16 @@ impl PropertyDeclarationBlock {
     /// `first_declaration_to_remove`.
     #[inline]
     pub fn remove_property(&mut self, property: &PropertyId, first_declaration: usize) {
+        if self.is_size_shorthand(property) {
+            for longhand in SIZE_LONGHANDS {
+                if let Some(index) = self.declarations.iter().position(|declaration| {
+                    declaration.id() == PropertyDeclarationId::Longhand(longhand)
+                }) {
+                    self.remove_declaration_at(index);
+                }
+            }
+            return;
+        }
         debug_assert_eq!(
             Some(first_declaration),
             self.first_declaration_to_remove(property)
@@ -978,6 +1013,41 @@ impl PropertyDeclarationBlock {
 
             self.remove_declaration_at(i);
             len -= 1;
+        }
+    }
+
+    /// Whether `property` is `size` used as the shorthand for `width` and
+    /// `height`, which is the case in every block but those of @page rules,
+    /// where it is the descriptor of the same name.
+    fn is_size_shorthand(&self, property: &PropertyId) -> bool {
+        property.longhand_id() == Some(LonghandId::Size)
+            && !self.contains(PropertyDeclarationId::Longhand(LonghandId::Size))
+    }
+
+    fn size_shorthand_to_css(&self, dest: &mut CssStringWriter) -> fmt::Result {
+        let (Some((width, width_importance)), Some((height, height_importance))) = (
+            self.get(PropertyDeclarationId::Longhand(LonghandId::Width)),
+            self.get(PropertyDeclarationId::Longhand(LonghandId::Height)),
+        ) else {
+            return Ok(());
+        };
+        if width_importance != height_importance {
+            return Ok(());
+        }
+        match (width, height) {
+            (PropertyDeclaration::Width(width), PropertyDeclaration::Height(height)) => {
+                width.to_css(&mut CssWriter::new(dest))?;
+                if width != height {
+                    dest.write_char(' ')?;
+                    height.to_css(&mut CssWriter::new(dest))?;
+                }
+                Ok(())
+            },
+            (
+                PropertyDeclaration::CSSWideKeyword(width),
+                PropertyDeclaration::CSSWideKeyword(height),
+            ) if width.keyword == height.keyword => width.keyword.to_css(&mut CssWriter::new(dest)),
+            _ => Ok(()),
         }
     }
 

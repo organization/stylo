@@ -974,6 +974,11 @@ impl PropertyDeclaration {
         };
 
         context.with_property_declaration(PropertyIdRef::from(non_custom_id), |context| {
+            if non_custom_id == NonCustomPropertyId::from(LonghandId::Size)
+                && !context.in_page_rule()
+            {
+                return parse_size_shorthand_into(declarations, context, input, &start);
+            }
             match non_custom_id.longhand_or_shorthand() {
                 Ok(longhand_id) => {
                     parse_non_custom_property_declaration_value_into(
@@ -1050,6 +1055,60 @@ impl PropertyDeclaration {
             Ok(())
         })
     }
+}
+
+/// Outside of @page, `size` is a shorthand for `width` and `height`:
+/// <https://drafts.csswg.org/css-sizing-4/#sizing-properties>. The @page
+/// descriptor of the same name is the `size` longhand.
+fn parse_size_shorthand_into(
+    declarations: &mut SourcePropertyDeclaration,
+    context: &ParserContext,
+    input: &mut Parser,
+    start: &cssparser::ParserState,
+) -> Result<(), ParseError> {
+    const LONGHANDS: [LonghandId; 2] = [LonghandId::Width, LonghandId::Height];
+    parse_non_custom_property_declaration_value_into(
+        declarations,
+        context,
+        input,
+        start,
+        |declarations, input| {
+            let (width, height) = input.parse_entirely(|input| {
+                let width =
+                    crate::values::specified::Size::parse_size_for_width_or_height(context, input)?;
+                let height = input
+                    .try_parse(|input| {
+                        crate::values::specified::Size::parse_size_for_width_or_height(
+                            context, input,
+                        )
+                    })
+                    .unwrap_or_else(|_| width.clone());
+                Ok((width, height))
+            })?;
+            declarations.push(PropertyDeclaration::Width(width));
+            declarations.push(PropertyDeclaration::Height(height));
+            Ok(())
+        },
+        |declarations, keyword| {
+            for longhand in LONGHANDS {
+                declarations.push(PropertyDeclaration::css_wide_keyword(longhand, keyword));
+            }
+        },
+        |declarations, variable_value| {
+            // There is no shorthand id to split the substituted value with, so each
+            // longhand takes all of it, which works when it is a single size.
+            let unparsed = Arc::new(UnparsedValue {
+                variable_value,
+                from_shorthand: None,
+            });
+            for id in LONGHANDS {
+                declarations.push(PropertyDeclaration::WithVariables(VariableDeclaration {
+                    id,
+                    value: unparsed.clone(),
+                }));
+            }
+        },
+    )
 }
 
 /// A PropertyDeclarationId without references, for use as a hash map key.

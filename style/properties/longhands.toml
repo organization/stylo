@@ -2171,7 +2171,7 @@ struct = "page"
 servo_pref = "layout.css.page-rule.enabled"
 spec = "https://drafts.csswg.org/css-page-3/#page-size-prop"
 animation_type = "none"
-rule_types_allowed = ["page"]
+rule_types_allowed = ["page", "style", "keyframe", "scope", "position-try"]
 affects = "layout"
 
 [stop-color]
