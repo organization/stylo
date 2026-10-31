@@ -432,6 +432,18 @@ impl NonCustomPropertyId {
         if rule_types.contains(CssRuleType::Margin) {
             rule_types = CssRuleType::Style.into();
         }
+        // Keyframes, @page and @position-try can't contain style or scope rules, so when
+        // we're inside one of them, its own restrictions apply rather than those of the
+        // rules around it.
+        let restricted = CssRuleTypes::from_bits(
+            rule_types.bits()
+                & (CssRuleType::Keyframe.bit()
+                    | CssRuleType::Page.bit()
+                    | CssRuleType::PositionTry.bit()),
+        );
+        if !restricted.is_empty() {
+            rule_types = restricted;
+        }
         if !self.allowed_in_rule(rule_types) {
             return false;
         }
