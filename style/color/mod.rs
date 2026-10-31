@@ -263,15 +263,18 @@ pub struct AbsoluteColor {
 impl PartialEq for AbsoluteColor {
     // See https://github.com/w3c/csswg-drafts/issues/13157#issuecomment-4165667681
     fn eq(&self, other: &Self) -> bool {
+        // Powerless components count as missing.
+        let this = self.powerless_as_missing();
+        let other = other.powerless_as_missing();
         // If both colors have the same color-space, just compare components; note that
         // any `none` components only match `none` in the other color.
-        if self.color_space == other.color_space {
-            return self.components == other.components
-                && self.alpha == other.alpha
-                && (self.flags & ColorFlags::NONE_FLAGS) == (other.flags & ColorFlags::NONE_FLAGS);
+        if this.color_space == other.color_space {
+            return this.components == other.components
+                && this.alpha == other.alpha
+                && (this.flags & ColorFlags::NONE_FLAGS) == (other.flags & ColorFlags::NONE_FLAGS);
         }
         // Otherwise, if any `none` components are present in either color, return false.
-        if self
+        if this
             .flags
             .union(other.flags)
             .intersects(ColorFlags::NONE_FLAGS)
@@ -282,7 +285,7 @@ impl PartialEq for AbsoluteColor {
         // difference in component values.
         // TODO: check value of EPSILON once the spec is updated to cover this.
         const EPSILON: f32 = 0.0001;
-        let a = self.to_color_space(ColorSpace::Oklab);
+        let a = this.to_color_space(ColorSpace::Oklab);
         let b = other.to_color_space(ColorSpace::Oklab);
         (a.components.0 - b.components.0).abs() <= EPSILON
             && (a.components.1 - b.components.1).abs() <= EPSILON
@@ -720,6 +723,24 @@ impl AbsoluteColor {
             }
         }
         converted
+    }
+
+    /// This color with a powerless hue turned into a missing one.
+    /// <https://drafts.csswg.org/css-color-4/#powerless>
+    fn powerless_as_missing(&self) -> Self {
+        let mut color = *self;
+        if let Some(index) = self.color_space.hue_index()
+            && self.has_powerless_hue()
+        {
+            if index == 0 {
+                color.flags.insert(ColorFlags::C0_IS_NONE);
+                color.components.0 = 0.0;
+            } else {
+                color.flags.insert(ColorFlags::C2_IS_NONE);
+                color.components.2 = 0.0;
+            }
+        }
+        color
     }
 
     /// Whether this color is achromatic in its own polar color space, so its
