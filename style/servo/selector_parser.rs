@@ -414,6 +414,10 @@ impl ::selectors::parser::PseudoElement for PseudoElement {
         self.has_argument()
     }
 
+    fn accepts_current_pseudo_class(&self) -> bool {
+        matches!(self, Self::SearchText)
+    }
+
     fn accepts_state_pseudo_classes(&self) -> bool {
         // `:only-child` is allowed after a descendant of a pseudo-element root.
         self.is_in_pseudo_element_tree()
@@ -801,6 +805,8 @@ pub enum NonTSPseudoClass {
     Autofill,
     Buffering,
     Checked,
+    /// The non-functional `:current` pseudo-class.
+    Current,
     /// The :state` pseudo-class.
     CustomState(CustomState),
     Default,
@@ -866,6 +872,10 @@ impl ::selectors::parser::NonTSPseudoClass for NonTSPseudoClass {
     fn visit<V>(&self, _: &mut V) -> bool {
         true
     }
+
+    fn is_current(&self) -> bool {
+        matches!(*self, NonTSPseudoClass::Current)
+    }
 }
 
 impl ToCss for NonTSPseudoClass {
@@ -886,6 +896,7 @@ impl ToCss for NonTSPseudoClass {
             Self::Autofill => ":autofill",
             Self::Buffering => ":buffering",
             Self::Checked => ":checked",
+            Self::Current => ":current",
             Self::CustomState(ref state) => {
                 dest.write_str(":state(")?;
                 state.0.to_css(dest)?;
@@ -1002,7 +1013,8 @@ impl NonTSPseudoClass {
             Self::UserValid => ElementState::USER_VALID,
             Self::Valid => ElementState::VALID,
             Self::Visited => ElementState::VISITED,
-            Self::CustomState(_)
+            Self::Current
+            | Self::CustomState(_)
             | Self::Lang(_)
             | Self::ServoNonZeroBorder
             | Self::VolumeLocked => ElementState::empty(),
@@ -1111,6 +1123,7 @@ impl<'a, 'i> ::selectors::Parser<'i> for SelectorParser<'a> {
             "autofill" => NonTSPseudoClass::Autofill,
             "buffering" => NonTSPseudoClass::Buffering,
             "checked" => NonTSPseudoClass::Checked,
+            "current" => NonTSPseudoClass::Current,
             "default" => NonTSPseudoClass::Default,
             "defined" => NonTSPseudoClass::Defined,
             "disabled" => NonTSPseudoClass::Disabled,
