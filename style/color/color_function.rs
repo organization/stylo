@@ -364,19 +364,24 @@ impl ColorFunction<ComputedColor> {
                 // use the rgb(..) syntax, because we should allow the color to be
                 // out of gamut and not clamp.
                 let use_rgb_sytax = origin_color.is_none();
+                let h = h.resolve()?;
+                let s = s.resolve()?;
+                let l = l.resolve()?;
+                // A missing component keeps the hsl() syntax, which does not clamp.
+                let clamp = use_rgb_sytax && h.is_some() && s.is_some() && l.is_some();
 
                 let mut result = AbsoluteColor::new(
                     ColorSpace::Hsl,
-                    h.resolve()?.map(|angle| normalize_hue(angle.degrees())),
-                    s.resolve()?.map(|s| {
-                        if use_rgb_sytax {
+                    h.map(|angle| normalize_hue(angle.degrees())),
+                    s.map(|s| {
+                        if clamp {
                             s.to_number(SATURATION_RANGE).clamp(0.0, SATURATION_RANGE)
                         } else {
                             s.to_number(SATURATION_RANGE)
                         }
                     }),
-                    l.resolve()?.map(|l| {
-                        if use_rgb_sytax {
+                    l.map(|l| {
+                        if clamp {
                             l.to_number(LIGHTNESS_RANGE).clamp(0.0, LIGHTNESS_RANGE)
                         } else {
                             l.to_number(LIGHTNESS_RANGE)
