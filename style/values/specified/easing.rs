@@ -81,23 +81,27 @@ impl TimingFunction {
             })
             .unwrap_or(StepPosition::End);
 
-        // TODO(Bug 2037743) - Enable calc()-expressions that can only be resolved at
-        // computed value time (due to relative lengths, sibling-index(), etc.).
-        let num_steps = match steps.resolve() {
-            Some(v) => v,
-            None => return Err(ParseError::custom(StyleParseErrorKind::UnspecifiedError)),
-        };
-
         // jump-none accepts a positive integer greater than 1.
         // FIXME(emilio): The spec asks us to avoid rejecting it at parse
         // time except until computed value time.
         //
         // It's not totally clear it's worth it though, and no other browser
         // does this.
-        if position == StepPosition::JumpNone && num_steps <= 1 {
+        //
+        // A calc() that can only be resolved at computed value time (due to
+        // relative lengths, sibling-index(), etc.) is clamped then instead.
+        if position == StepPosition::JumpNone && steps.resolve().is_some_and(|steps| steps <= 1) {
             return Err(ParseError::custom(StyleParseErrorKind::UnspecifiedError));
         }
         Ok(GenericTimingFunction::Steps(steps, position))
+    }
+
+    fn min_steps(position: StepPosition) -> i32 {
+        if position == StepPosition::JumpNone {
+            2
+        } else {
+            1
+        }
     }
 
     fn parse_linear_function(
@@ -179,10 +183,10 @@ impl TimingFunction {
     /// Generate the ComputedTimingFunction without Context.
     pub fn to_computed_value_without_context(&self) -> ComputedTimingFunction {
         match &self {
-            GenericTimingFunction::Steps(steps, pos) => {
-                // Resolvable value was enforced at parse time
-                GenericTimingFunction::Steps(steps.resolve().unwrap(), *pos)
-            },
+            GenericTimingFunction::Steps(steps, pos) => GenericTimingFunction::Steps(
+                steps.resolve().unwrap_or(1).max(Self::min_steps(*pos)),
+                *pos,
+            ),
             GenericTimingFunction::CubicBezier { x1, y1, x2, y2 } => {
                 // Resolvable value was enforced at parse time
                 GenericTimingFunction::CubicBezier {
@@ -203,8 +207,14 @@ impl TimingFunction {
 
 impl ToComputedValue for TimingFunction {
     type ComputedValue = ComputedTimingFunction;
-    fn to_computed_value(&self, _: &Context) -> Self::ComputedValue {
-        self.to_computed_value_without_context()
+    fn to_computed_value(&self, context: &Context) -> Self::ComputedValue {
+        match self {
+            GenericTimingFunction::Steps(steps, pos) => GenericTimingFunction::Steps(
+                steps.to_computed_value(context).max(Self::min_steps(*pos)),
+                *pos,
+            ),
+            _ => self.to_computed_value_without_context(),
+        }
     }
 
     fn from_computed_value(computed: &Self::ComputedValue) -> Self {
