@@ -4633,7 +4633,7 @@ initial = "computed::BoxDirection::Normal"
 
 [-moz-box-orient]
 struct = "xul"
-engine = "gecko"
+servo_pref = "layout.css.webkit-box-orient.enabled"
 spec = "Nonstandard (https://developer.mozilla.org/en-US/docs/Web/CSS/box-orient)"
 animation_type = "discrete"
 affects = "layout"

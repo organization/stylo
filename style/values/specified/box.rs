@@ -2675,9 +2675,9 @@ pub enum BoxDirection {
 )]
 #[repr(u8)]
 pub enum BoxOrient {
-    #[cfg_attr(feature = "gecko", parse(aliases = "inline-axis"))]
+    #[parse(aliases = "inline-axis")]
     Horizontal,
-    #[cfg_attr(feature = "gecko", parse(aliases = "block-axis"))]
+    #[parse(aliases = "block-axis")]
     Vertical,
 }
 
