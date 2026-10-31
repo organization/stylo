@@ -73,6 +73,12 @@ pub trait PseudoElement: Sized + ToCss {
     fn is_in_pseudo_element_tree(&self) -> bool {
         false
     }
+
+    /// Whether the `:current` pseudo-class can follow this pseudo-element.
+    /// https://drafts.csswg.org/css-pseudo-4/#selectordef-search-text
+    fn accepts_current_pseudo_class(&self) -> bool {
+        false
+    }
 }
 
 /// A trait that represents a pseudo-class.
@@ -84,6 +90,11 @@ pub trait NonTSPseudoClass: Sized + ToCss {
     ///
     /// https://drafts.csswg.org/selectors-4/#useraction-pseudos
     fn is_user_action_state(&self) -> bool;
+
+    /// Whether this pseudo-class is the non-functional `:current`.
+    fn is_current(&self) -> bool {
+        false
+    }
 
     fn visit<V>(&self, _visitor: &mut V) -> bool
     where
@@ -156,6 +167,9 @@ bitflags! {
         /// Whether we've parsed a pseudo-element which is in a pseudo-element tree (i.e. it is a
         /// descendant pseudo of a pseudo-element root).
         const IN_PSEUDO_ELEMENT_TREE = 1 << 9;
+
+        /// Whether we've parsed a pseudo-element that takes the `:current` pseudo-class.
+        const AFTER_CURRENT_ACCEPTING_PSEUDO = 1 << 10;
     }
 }
 
@@ -3482,6 +3496,9 @@ where
                 if p.is_in_pseudo_element_tree() {
                     state.insert(SelectorParsingState::IN_PSEUDO_ELEMENT_TREE);
                 }
+                if p.accepts_current_pseudo_class() {
+                    state.insert(SelectorParsingState::AFTER_CURRENT_ACCEPTING_PSEUDO);
+                }
                 builder.push_combinator(Combinator::PseudoElement);
                 builder.push_simple_selector(Component::PseudoElement(p));
             },
@@ -3830,6 +3847,14 @@ where
     Impl: SelectorImpl,
 {
     if !state.allows_non_functional_pseudo_classes() {
+        if state.intersects(SelectorParsingState::AFTER_CURRENT_ACCEPTING_PSEUDO)
+            && !state.intersects(SelectorParsingState::AFTER_SLOTTED)
+        {
+            let pseudo_class = P::parse_non_ts_pseudo_class(parser, name)?;
+            if pseudo_class.is_current() {
+                return Ok(Component::NonTSPseudoClass(pseudo_class));
+            }
+        }
         return Err(ParseError::custom(SelectorParseErrorKind::InvalidState));
     }
 

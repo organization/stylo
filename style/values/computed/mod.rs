@@ -67,15 +67,15 @@ pub use self::border::{
 };
 pub use self::box_::{
     AlignmentBaseline, Appearance, BackfaceVisibility, BaselineShift, BaselineSource,
-    BlockStepAlign, BlockStepInsert, BlockStepRound, BlockStepSize, BoxAlign, BoxCollapse,
-    BoxDirection, BoxOrient, BoxPack, BreakBetween, BreakWithin, Clear, Contain,
-    ContainIntrinsicSize, ContainerName, ContainerType, ContentVisibility, DirectionProperty,
-    Display, DominantBaseline, Float, ImageOrientation, Isolation, LineClamp, MarginTrim, Orient,
-    Overflow, OverflowAnchor, OverflowClipMargin, OverscrollBehavior, Perspective,
-    PositionProperty, Resize, ScrollAxisLock, ScrollBehavior, ScrollMarkerGroup, ScrollSnapAlign,
-    ScrollSnapAxis, ScrollSnapStop, ScrollSnapStrictness, ScrollSnapType, ScrollTargetGroup,
-    ScrollbarGutter, ScrollbarInset, TextOrientation, TopLayer, TouchAction, Visibility,
-    WillChange, WritingModeProperty, Zoom,
+    BlockEllipsis, BlockStepAlign, BlockStepInsert, BlockStepRound, BlockStepSize, BoxAlign,
+    BoxCollapse, BoxDirection, BoxOrient, BoxPack, BreakBetween, BreakWithin, Clear, Contain,
+    ContainIntrinsicSize, ContainerName, ContainerType, ContentVisibility, Continue,
+    DirectionProperty, Display, DominantBaseline, Float, ImageOrientation, Isolation, LineClamp,
+    MarginTrim, MaxLines, Orient, Overflow, OverflowAnchor, OverflowClipMargin, OverscrollBehavior,
+    Perspective, PositionProperty, Resize, ScrollAxisLock, ScrollBehavior, ScrollMarkerGroup,
+    ScrollSnapAlign, ScrollSnapAxis, ScrollSnapStop, ScrollSnapStrictness, ScrollSnapType,
+    ScrollTargetGroup, ScrollbarGutter, ScrollbarInset, TextOrientation, TopLayer, TouchAction,
+    Visibility, WillChange, WritingModeProperty, Zoom,
 };
 pub use self::color::{
     Color, ColorOrAuto, ColorPropertyValue, ColorScheme, ForcedColorAdjust, PrintColorAdjust,
@@ -891,7 +891,6 @@ trivial_to_computed_value!(crate::values::generics::color::ColorMixFlags);
     Animate,
     Clone,
     ComputeSquaredDistance,
-    Copy,
     Debug,
     MallocSizeOf,
     PartialEq,
@@ -903,6 +902,9 @@ trivial_to_computed_value!(crate::values::generics::color::ColorMixFlags);
 pub enum AngleOrPercentage {
     Percentage(Percentage),
     Angle(Angle),
+    /// A sum of an angle and a percentage of a full turn, as computed from a math function.
+    #[animation(error)]
+    Calc(Box<specified::CalcNumeric>),
 }
 
 impl ToComputedValue for specified::AngleOrPercentage {
@@ -917,6 +919,24 @@ impl ToComputedValue for specified::AngleOrPercentage {
             specified::AngleOrPercentage::Angle(angle) => {
                 AngleOrPercentage::Angle(angle.to_computed_value(context))
             },
+            specified::AngleOrPercentage::Calc(calc) => {
+                let Ok(mut node) = calc.node.to_computed_value(Some(context), None) else {
+                    return AngleOrPercentage::Angle(Angle::from_degrees(0.));
+                };
+                node.simplify_and_sort();
+                match node.resolve() {
+                    Ok(specified::calc::Leaf::Angle(angle)) => {
+                        AngleOrPercentage::Angle(Angle::from_degrees(angle.degrees()))
+                    },
+                    Ok(specified::calc::Leaf::Percentage(percentage)) => {
+                        AngleOrPercentage::Percentage(Percentage(percentage.get()))
+                    },
+                    _ => AngleOrPercentage::Calc(Box::new(specified::CalcNumeric {
+                        clamping_mode: calc.clamping_mode,
+                        node,
+                    })),
+                }
+            },
         }
     }
     #[inline]
@@ -928,6 +948,7 @@ impl ToComputedValue for specified::AngleOrPercentage {
             AngleOrPercentage::Angle(angle) => {
                 specified::AngleOrPercentage::Angle(ToComputedValue::from_computed_value(&angle))
             },
+            AngleOrPercentage::Calc(ref calc) => specified::AngleOrPercentage::Calc(calc.clone()),
         }
     }
 }

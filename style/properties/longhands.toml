@@ -99,10 +99,40 @@ type = "LineClamp"
 initial = "computed::LineClamp::none()"
 struct = "box"
 boxed = true
-servo_pref = "layout.css.line-clamp.enabled"
+engine = "gecko"
 gecko_pref = "layout.css.line-clamp.enabled"
 gecko_ffi_name = "mWebkitLineClamp"
 spec = "https://drafts.csswg.org/css-overflow-4/#propdef-line-clamp"
+affects = "layout"
+
+[max-lines]
+type = "MaxLines"
+initial = "computed::MaxLines::auto()"
+struct = "box"
+engine = "servo"
+servo_pref = "layout.css.line-clamp.enabled"
+animation_type = "discrete"
+spec = "https://drafts.csswg.org/css-overflow-4/#propdef-max-lines"
+affects = "layout"
+
+[block-ellipsis]
+type = "BlockEllipsis"
+initial = "computed::BlockEllipsis::NoEllipsis"
+struct = "inherited_text"
+engine = "servo"
+servo_pref = "layout.css.line-clamp.enabled"
+animation_type = "discrete"
+spec = "https://drafts.csswg.org/css-overflow-4/#propdef-block-ellipsis"
+affects = "layout"
+
+[continue]
+type = "Continue"
+initial = "computed::Continue::Normal"
+struct = "box"
+engine = "servo"
+servo_pref = "layout.css.line-clamp.enabled"
+animation_type = "discrete"
+spec = "https://drafts.csswg.org/css-overflow-4/#propdef-continue"
 affects = "layout"
 
 [-x-lang]
@@ -371,7 +401,7 @@ servo_restyle_damage = "repaint"
 affects = "paint"
 
 [background-position-x]
-type = "position::HorizontalPosition"
+type = "position::BackgroundPositionX"
 initial = "computed::LengthPercentage::zero_percent()"
 struct = "background"
 initial_specified_value = "SpecifiedValue::initial_specified_value()"
@@ -382,7 +412,7 @@ servo_restyle_damage = "repaint"
 affects = "paint"
 
 [background-position-y]
-type = "position::VerticalPosition"
+type = "position::BackgroundPositionY"
 initial = "computed::LengthPercentage::zero_percent()"
 struct = "background"
 initial_specified_value = "SpecifiedValue::initial_specified_value()"
@@ -4481,6 +4511,67 @@ animation_type = "discrete"
 affects = "paint"
 type = "MaskType"
 initial = "computed::MaskType::Luminance"
+
+[mask-border-source]
+type = "Image"
+initial = "computed::Image::None"
+struct = "svg"
+engine = "servo"
+servo_pref = "layout.css.masking.enabled"
+parse_method = "parse_with_cors_anonymous"
+animation_type = "discrete"
+spec = "https://drafts.fxtf.org/css-masking-1/#propdef-mask-border-source"
+affects = "paint"
+
+[mask-border-slice]
+type = "BorderImageSlice"
+initial = "generics::border::BorderImageSlice { offsets: generics::rect::Rect::all(generics::NonNegative(computed::NumberOrPercentage::Number(0.))), fill: false }"
+struct = "svg"
+engine = "servo"
+servo_pref = "layout.css.masking.enabled"
+boxed = true
+spec = "https://drafts.fxtf.org/css-masking-1/#propdef-mask-border-slice"
+affects = "paint"
+
+[mask-border-width]
+type = "BorderImageWidth"
+initial = "computed::BorderImageWidth::all(generics::border::BorderImageSideWidth::Auto)"
+struct = "svg"
+engine = "servo"
+servo_pref = "layout.css.masking.enabled"
+boxed = true
+spec = "https://drafts.fxtf.org/css-masking-1/#propdef-mask-border-width"
+affects = "paint"
+
+[mask-border-outset]
+type = "NonNegativeLengthOrNumberRect"
+initial = "generics::rect::Rect::all(computed::NonNegativeLengthOrNumber::zero())"
+struct = "svg"
+engine = "servo"
+servo_pref = "layout.css.masking.enabled"
+boxed = true
+spec = "https://drafts.fxtf.org/css-masking-1/#propdef-mask-border-outset"
+affects = "paint"
+
+[mask-border-repeat]
+type = "BorderImageRepeat"
+initial = "computed::BorderImageRepeat::stretch()"
+struct = "svg"
+engine = "servo"
+servo_pref = "layout.css.masking.enabled"
+animation_type = "discrete"
+spec = "https://drafts.fxtf.org/css-masking-1/#propdef-mask-border-repeat"
+affects = "paint"
+
+[mask-border-mode]
+type = "MaskType"
+initial = "computed::MaskType::Alpha"
+struct = "svg"
+engine = "servo"
+servo_pref = "layout.css.masking.enabled"
+animation_type = "discrete"
+spec = "https://drafts.fxtf.org/css-masking-1/#propdef-mask-border-mode"
+affects = "paint"
 
 [mask-mode]
 struct = "svg"

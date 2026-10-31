@@ -395,7 +395,7 @@ sub_properties = ["background-position-x", "background-position-y"]
 spec = "https://drafts.csswg.org/css-backgrounds-4/#the-background-position"
 
 [mask]
-sub_properties = ["mask-mode", "mask-repeat", "mask-clip", "mask-origin", "mask-composite", "mask-position-x", "mask-position-y", "mask-size", "mask-image"]
+sub_properties = ["mask-mode", "mask-repeat", "mask-clip", "mask-origin", "mask-composite", "mask-position-x", "mask-position-y", "mask-size", "mask-image", "mask-border-source", "mask-border-slice", "mask-border-width", "mask-border-outset", "mask-border-repeat", "mask-border-mode"]
 spec = "https://drafts.fxtf.org/css-masking/#propdef-mask"
 extra_prefixes = ["webkit"]
 servo_pref = "layout.css.masking.enabled"
@@ -474,7 +474,7 @@ servo_pref = "layout.css.corner-shape.enabled"
 kind = "two_properties"
 
 [outline]
-sub_properties = ["outline-color", "outline-style", "outline-width"]
+sub_properties = ["outline-width", "outline-style", "outline-color"]
 spec = "https://drafts.csswg.org/css-ui/#propdef-outline"
 
 [text-spacing]
@@ -699,10 +699,24 @@ spec = "https://compat.spec.whatwg.org/#the-webkit-text-stroke"
 derive_serialize = true
 
 [-webkit-line-clamp]
-servo_pref = "layout.css.line-clamp.enabled"
+engine = "gecko"
 flags = "IS_LEGACY_SHORTHAND ALLOWS_DISABLED_SUBPROPERTIES"
 sub_properties = ["line-clamp"]
 spec = "https://drafts.csswg.org/css-overflow-4/#webkit-line-clamp"
+
+["-webkit-line-clamp/servo"]
+name = "-webkit-line-clamp"
+engine = "servo"
+servo_pref = "layout.css.line-clamp.enabled"
+flags = "IS_LEGACY_SHORTHAND"
+sub_properties = ["max-lines", "block-ellipsis", "continue"]
+spec = "https://drafts.csswg.org/css-overflow-4/#webkit-line-clamp"
+
+[line-clamp]
+engine = "servo"
+servo_pref = "layout.css.line-clamp.enabled"
+sub_properties = ["max-lines", "block-ellipsis", "continue"]
+spec = "https://drafts.csswg.org/css-overflow-4/#propdef-line-clamp"
 
 [-moz-appearance]
 engine = "gecko"

@@ -2682,6 +2682,124 @@ pub mod transition {
     }
 }
 
+#[cfg(feature = "servo")]
+pub mod line_clamp {
+    pub use crate::properties::generated::shorthands::line_clamp::*;
+
+    use super::*;
+    use crate::values::computed::Continue;
+    use crate::values::generics::box_::BlockEllipsis;
+    use crate::values::specified::{LineClamp, MaxLines};
+
+    pub fn parse_value(
+        context: &ParserContext,
+        input: &mut Parser,
+    ) -> Result<Longhands, ParseError> {
+        if input.try_parse(|i| i.expect_ident_matching("none")).is_ok() {
+            return Ok(expanded! {
+                max_lines: MaxLines::auto(),
+                block_ellipsis: BlockEllipsis::NoEllipsis,
+                continue_: Continue::Normal,
+            });
+        }
+        let value = LineClamp::parse(context, input)?;
+        Ok(expanded! {
+            max_lines: value.max_lines,
+            block_ellipsis: value.block_ellipsis,
+            continue_: if value.webkit_legacy {
+                Continue::WebkitLegacy
+            } else {
+                Continue::Collapse
+            },
+        })
+    }
+
+    impl<'a> ToCss for LonghandsToSerialize<'a> {
+        fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
+        where
+            W: fmt::Write,
+        {
+            match *self.continue_ {
+                Continue::Normal
+                    if self.max_lines.is_auto()
+                        && matches!(
+                            *self.block_ellipsis,
+                            BlockEllipsis::Ellipsis | BlockEllipsis::NoEllipsis
+                        ) =>
+                {
+                    dest.write_str("none")
+                },
+                Continue::Collapse | Continue::WebkitLegacy => {
+                    let mut writer = SequenceWriter::new(dest, " ");
+                    writer.item(self.max_lines)?;
+                    if !self.block_ellipsis.is_ellipsis() {
+                        writer.item(self.block_ellipsis)?;
+                    }
+                    if *self.continue_ == Continue::WebkitLegacy {
+                        writer.raw_item("-webkit-legacy")?;
+                    }
+                    Ok(())
+                },
+                _ => Ok(()),
+            }
+        }
+    }
+}
+
+#[cfg(feature = "servo")]
+pub mod _webkit_line_clamp {
+    pub use crate::properties::generated::shorthands::_webkit_line_clamp::*;
+
+    use super::*;
+    use crate::values::computed::Continue;
+    use crate::values::generics::box_::BlockEllipsis;
+    use crate::values::specified::{MaxLines, PositiveInteger};
+
+    pub fn parse_value(
+        context: &ParserContext,
+        input: &mut Parser,
+    ) -> Result<Longhands, ParseError> {
+        let lines = input.try_parse(|i| PositiveInteger::parse(context, i));
+        if lines.is_err() {
+            input.expect_ident_matching("none")?;
+        }
+        Ok(expanded! {
+            continue_: if lines.is_ok() {
+                Continue::WebkitLegacy
+            } else {
+                Continue::Normal
+            },
+            max_lines: lines.map_or_else(|_| MaxLines::auto(), |lines| MaxLines::lines(lines, false)),
+            block_ellipsis: BlockEllipsis::Ellipsis,
+        })
+    }
+
+    impl<'a> ToCss for LonghandsToSerialize<'a> {
+        fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
+        where
+            W: fmt::Write,
+        {
+            match (
+                *self.continue_,
+                self.block_ellipsis,
+                self.max_lines.lines_value(),
+            ) {
+                (Continue::Normal, BlockEllipsis::Ellipsis | BlockEllipsis::NoEllipsis, None)
+                    if self.max_lines.is_auto() =>
+                {
+                    dest.write_str("none")
+                },
+                (Continue::WebkitLegacy, BlockEllipsis::Ellipsis, Some(lines))
+                    if self.max_lines.kw.is_none() =>
+                {
+                    lines.to_css(dest)
+                },
+                _ => Ok(()),
+            }
+        }
+    }
+}
+
 pub mod outline {
     pub use crate::properties::generated::shorthands::outline::*;
 
@@ -2724,14 +2842,14 @@ pub mod outline {
             W: fmt::Write,
         {
             let mut writer = SequenceWriter::new(dest, " ");
-            if *self.outline_color != outline_color::get_initial_specified_value() {
-                writer.item(self.outline_color)?;
+            if *self.outline_width != outline_width::get_initial_specified_value() {
+                writer.item(self.outline_width)?;
             }
             if *self.outline_style != outline_style::get_initial_specified_value() {
                 writer.item(self.outline_style)?;
             }
-            if *self.outline_width != outline_width::get_initial_specified_value() {
-                writer.item(self.outline_width)?;
+            if *self.outline_color != outline_color::get_initial_specified_value() {
+                writer.item(self.outline_color)?;
             }
             if !writer.has_written() {
                 self.outline_style.to_css(dest)?;
@@ -2759,8 +2877,8 @@ pub mod background_position {
 
         input.parse_comma_separated(|input| {
             let value = Position::parse_three_value_quirky(context, input, AllowQuirks::Yes)?;
-            position_x.push(value.horizontal);
-            position_y.push(value.vertical);
+            position_x.push(value.horizontal.convert());
+            position_y.push(value.vertical.convert());
             any = true;
             Ok(())
         })?;
@@ -2783,12 +2901,23 @@ pub mod background_position {
             if len == 0 || len != self.background_position_y.0.len() {
                 return Ok(());
             }
-            for i in 0..len {
-                Position {
-                    horizontal: self.background_position_x.0[i].clone(),
-                    vertical: self.background_position_y.0[i].clone(),
-                }
-                .to_css(dest)?;
+            let Some(positions) = self
+                .background_position_x
+                .0
+                .iter()
+                .zip(self.background_position_y.0.iter())
+                .map(|(x, y)| {
+                    Some(Position {
+                        horizontal: x.physical()?,
+                        vertical: y.physical()?,
+                    })
+                })
+                .collect::<Option<Vec<_>>>()
+            else {
+                return Ok(());
+            };
+            for (i, position) in positions.iter().enumerate() {
+                position.to_css(dest)?;
 
                 if i < len - 1 {
                     dest.write_str(", ")?;
@@ -2895,8 +3024,8 @@ pub mod background {
                 origin = Some(Origin::BorderBox);
             }
             if let Some(position) = position {
-                background_position_x.push(position.horizontal);
-                background_position_y.push(position.vertical);
+                background_position_x.push(position.horizontal.convert());
+                background_position_y.push(position.vertical.convert());
             } else {
                 background_position_x.push(PositionComponent::zero());
                 background_position_y.push(PositionComponent::zero());
@@ -2984,11 +3113,20 @@ pub mod background {
             if len != self.background_attachment.0.len() {
                 return Ok(());
             }
+            let Some(positions) = self
+                .background_position_x
+                .0
+                .iter()
+                .zip(self.background_position_y.0.iter())
+                .map(|(x, y)| Some((x.physical()?, y.physical()?)))
+                .collect::<Option<Vec<_>>>()
+            else {
+                return Ok(());
+            };
 
             for i in 0..len {
                 let image = &self.background_image.0[i];
-                let position_x = &self.background_position_x.0[i];
-                let position_y = &self.background_position_y.0[i];
+                let (ref position_x, ref position_y) = positions[i];
                 let repeat = &self.background_repeat.0[i];
                 let size = &self.background_size.0[i];
                 let attachment = &self.background_attachment.0[i];
@@ -4087,6 +4225,10 @@ pub mod mask {
     use super::*;
     use crate::parser::Parse;
     use crate::properties::longhands::{
+        mask_border_mode, mask_border_outset, mask_border_repeat, mask_border_slice,
+        mask_border_source, mask_border_width,
+    };
+    use crate::properties::longhands::{
         mask_clip, mask_composite, mask_mode, mask_origin, mask_position_x, mask_position_y,
         mask_repeat,
     };
@@ -4211,6 +4353,12 @@ pub mod mask {
            mask_origin: mask_origin::SpecifiedValue(mask_origin.into()),
            mask_clip: mask_clip::SpecifiedValue(mask_clip.into()),
            mask_composite: mask_composite::SpecifiedValue(mask_composite.into()),
+           mask_border_source: mask_border_source::get_initial_specified_value(),
+           mask_border_slice: mask_border_slice::get_initial_specified_value(),
+           mask_border_width: mask_border_width::get_initial_specified_value(),
+           mask_border_outset: mask_border_outset::get_initial_specified_value(),
+           mask_border_repeat: mask_border_repeat::get_initial_specified_value(),
+           mask_border_mode: mask_border_mode::get_initial_specified_value(),
         })
     }
 
@@ -4225,6 +4373,15 @@ pub mod mask {
 
             let len = self.mask_image.0.len();
             if len == 0 {
+                return Ok(());
+            }
+            if *self.mask_border_source != mask_border_source::get_initial_specified_value()
+                || *self.mask_border_slice != mask_border_slice::get_initial_specified_value()
+                || *self.mask_border_width != mask_border_width::get_initial_specified_value()
+                || *self.mask_border_outset != mask_border_outset::get_initial_specified_value()
+                || *self.mask_border_repeat != mask_border_repeat::get_initial_specified_value()
+                || *self.mask_border_mode != mask_border_mode::get_initial_specified_value()
+            {
                 return Ok(());
             }
             if self.mask_mode.0.len() != len {

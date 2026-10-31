@@ -163,8 +163,12 @@ impl<'a, 'b: 'a> StyleAdjuster<'a, 'b> {
         use crate::properties::longhands::_moz_box_orient::computed_value::T as BoxOrient;
         use crate::values::specified::box_::{DisplayInside, DisplayOutside};
         let box_style = self.style.get_box();
-        let line_clamp = box_style.get_line_clamp();
-        if line_clamp.is_none() {
+        #[cfg(feature = "gecko")]
+        if box_style.get_line_clamp().is_none() {
+            return;
+        }
+        #[cfg(feature = "servo")]
+        if *box_style.get_continue_() == crate::values::computed::Continue::Normal {
             return;
         }
 

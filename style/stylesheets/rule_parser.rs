@@ -306,7 +306,7 @@ impl AtRuleType {
                     }
 
                 // The font feature value at-rules supported within @font-feature-values.
-                if cfg!(feature = "gecko") && FontFeatureValuesBlockType::from_name(name).is_some() {
+                if FontFeatureValuesBlockType::from_name(name).is_some() {
                     return Some(Self::FontFeatureValuesBlock);
                 }
 

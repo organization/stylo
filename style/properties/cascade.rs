@@ -695,6 +695,29 @@ impl<'a> Declarations<'a> {
     }
 }
 
+/// Whether rolling the cascade back at `priority` with `kind` would bring back the `revert-rule`
+/// declaration that let this declaration apply in the first place, which loops, so the
+/// declaration acts as `unset` instead. `revert-layer` keeps the declarations of earlier layers,
+/// and `revert` those of other origins.
+/// <https://github.com/w3c/csswg-drafts/issues/13916>
+fn reverts_in_cycle(
+    reverted: Option<&(CascadePriority, RevertKind)>,
+    priority: &CascadePriority,
+    kind: RevertKind,
+) -> bool {
+    let Some(&(reverted_priority, RevertKind::Rule)) = reverted else {
+        return false;
+    };
+    match kind {
+        RevertKind::Layer => reverted_priority.layer_order() < priority.layer_order(),
+        RevertKind::Origin => {
+            reverted_priority.cascade_level().origin().origin()
+                != priority.cascade_level().origin().origin()
+        },
+        RevertKind::Rule => false,
+    }
+}
+
 #[derive(Default)]
 struct RevertedSet {
     // Just to avoid the hashmap lookup in the common case.
@@ -1131,16 +1154,25 @@ impl<'a> Cascade<'a> {
             );
         }
         let can_skip_apply = match declaration.get_css_wide_keyword() {
-            Some(keyword) => {
+            Some(mut keyword) => {
                 if let Some(revert_kind) = keyword.revert_kind() {
-                    // We intentionally don't want to insert it into
-                    // `self.seen.longhands`, `reverted` takes care of rejecting
-                    // other declarations as needed.
-                    self.reverted.longhands_set.insert(longhand_id);
-                    self.reverted
-                        .longhands
-                        .insert(longhand_id, (priority, revert_kind));
-                    return;
+                    if !reverts_in_cycle(
+                        self.reverted.longhands.get(&longhand_id),
+                        &priority,
+                        revert_kind,
+                    ) {
+                        // We intentionally don't want to insert it into
+                        // `self.seen.longhands`, `reverted` takes care of rejecting
+                        // other declarations as needed.
+                        self.reverted.longhands_set.insert(longhand_id);
+                        self.reverted
+                            .longhands
+                            .insert(longhand_id, (priority, revert_kind));
+                        return;
+                    }
+                    keyword = CSSWideKeyword::Unset;
+                    declaration =
+                        Cow::Owned(PropertyDeclaration::css_wide_keyword(longhand_id, keyword));
                 }
 
                 let inherited = longhand_id.inherited();
@@ -1764,6 +1796,16 @@ impl<'a> Cascade<'a> {
         }
 
         if !(priority.flags() - context.included_cascade_flags).is_empty() {
+            return;
+        }
+
+        if let CustomDeclarationValue::CSSWideKeyword(keyword) = value
+            && let Some(revert_kind) = keyword.revert_kind()
+            && reverts_in_cycle(self.reverted.custom.get(name), &priority, revert_kind)
+        {
+            if let Entry::Vacant(entry) = self.seen.custom.var.entry(name) {
+                entry.insert(None);
+            }
             return;
         }
 

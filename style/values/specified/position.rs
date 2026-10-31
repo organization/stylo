@@ -50,6 +50,12 @@ pub type HorizontalPosition = PositionComponent<HorizontalPositionKeyword>;
 /// The specified value of a vertical position.
 pub type VerticalPosition = PositionComponent<VerticalPositionKeyword>;
 
+/// The specified value of a `background-position-x` item.
+pub type BackgroundPositionX = PositionComponent<BackgroundPositionXKeyword>;
+
+/// The specified value of a `background-position-y` item.
+pub type BackgroundPositionY = PositionComponent<BackgroundPositionYKeyword>;
+
 /// The specified value of a component of a CSS `<position>`.
 #[derive(Clone, Debug, MallocSizeOf, PartialEq, SpecifiedValueInfo, ToCss, ToShmem, ToTyped)]
 #[typed(todo_derive_fields)]
@@ -106,6 +112,137 @@ pub enum HorizontalPositionKeyword {
 pub enum VerticalPositionKeyword {
     Top,
     Bottom,
+}
+
+/// An origin keyword of `background-position-x`.
+///
+/// https://drafts.csswg.org/css-backgrounds-4/#propdef-background-position-x
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    MallocSizeOf,
+    Parse,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToComputedValue,
+    ToCss,
+    ToResolvedValue,
+    ToShmem,
+)]
+#[allow(missing_docs)]
+#[repr(u8)]
+pub enum BackgroundPositionXKeyword {
+    Left,
+    Right,
+    XStart,
+    XEnd,
+}
+
+/// An origin keyword of `background-position-y`.
+///
+/// https://drafts.csswg.org/css-backgrounds-4/#propdef-background-position-y
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    MallocSizeOf,
+    Parse,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToComputedValue,
+    ToCss,
+    ToResolvedValue,
+    ToShmem,
+)]
+#[allow(missing_docs)]
+#[repr(u8)]
+pub enum BackgroundPositionYKeyword {
+    Top,
+    Bottom,
+    YStart,
+    YEnd,
+}
+
+impl From<HorizontalPositionKeyword> for BackgroundPositionXKeyword {
+    fn from(keyword: HorizontalPositionKeyword) -> Self {
+        match keyword {
+            HorizontalPositionKeyword::Left => Self::Left,
+            HorizontalPositionKeyword::Right => Self::Right,
+        }
+    }
+}
+
+impl From<VerticalPositionKeyword> for BackgroundPositionYKeyword {
+    fn from(keyword: VerticalPositionKeyword) -> Self {
+        match keyword {
+            VerticalPositionKeyword::Top => Self::Top,
+            VerticalPositionKeyword::Bottom => Self::Bottom,
+        }
+    }
+}
+
+impl BackgroundPositionXKeyword {
+    /// The physical keyword, if this is one.
+    pub fn physical(self) -> Option<HorizontalPositionKeyword> {
+        match self {
+            Self::Left => Some(HorizontalPositionKeyword::Left),
+            Self::Right => Some(HorizontalPositionKeyword::Right),
+            Self::XStart | Self::XEnd => None,
+        }
+    }
+}
+
+impl BackgroundPositionYKeyword {
+    /// The physical keyword, if this is one.
+    pub fn physical(self) -> Option<VerticalPositionKeyword> {
+        match self {
+            Self::Top => Some(VerticalPositionKeyword::Top),
+            Self::Bottom => Some(VerticalPositionKeyword::Bottom),
+            Self::YStart | Self::YEnd => None,
+        }
+    }
+}
+
+impl<S> PositionComponent<S> {
+    /// Converts the keyword of this component.
+    pub fn convert<T: From<S>>(self) -> PositionComponent<T> {
+        match self {
+            PositionComponent::Center => PositionComponent::Center,
+            PositionComponent::Length(length) => PositionComponent::Length(length),
+            PositionComponent::Side(side, length) => PositionComponent::Side(side.into(), length),
+        }
+    }
+}
+
+impl BackgroundPositionX {
+    /// The equivalent `<position>` component, unless this uses a logical keyword.
+    pub fn physical(&self) -> Option<HorizontalPosition> {
+        Some(match self {
+            PositionComponent::Center => PositionComponent::Center,
+            PositionComponent::Length(length) => PositionComponent::Length(length.clone()),
+            PositionComponent::Side(side, length) => {
+                PositionComponent::Side(side.physical()?, length.clone())
+            },
+        })
+    }
+}
+
+impl BackgroundPositionY {
+    /// The equivalent `<position>` component, unless this uses a logical keyword.
+    pub fn physical(&self) -> Option<VerticalPosition> {
+        Some(match self {
+            PositionComponent::Center => PositionComponent::Center,
+            PositionComponent::Length(length) => PositionComponent::Length(length.clone()),
+            PositionComponent::Side(side, length) => {
+                PositionComponent::Side(side.physical()?, length.clone())
+            },
+        })
+    }
 }
 
 impl Parse for Position {
@@ -314,10 +451,12 @@ impl<S: Side> ToComputedValue for PositionComponent<S> {
         match *self {
             PositionComponent::Center => ComputedLengthPercentage::new_percent(Percentage(0.5)),
             PositionComponent::Side(ref keyword, None) => {
-                let p = Percentage(if keyword.is_start() { 0. } else { 1. });
-                ComputedLengthPercentage::new_percent(p)
+                let start = keyword.is_start_in(context.builder.writing_mode);
+                ComputedLengthPercentage::new_percent(Percentage(if start { 0. } else { 1. }))
             },
-            PositionComponent::Side(ref keyword, Some(ref length)) if !keyword.is_start() => {
+            PositionComponent::Side(ref keyword, Some(ref length))
+                if !keyword.is_start_in(context.builder.writing_mode) =>
+            {
                 let length = length.to_computed_value(context);
                 // We represent `<end-side> <length>` as `calc(100% - <length>)`.
                 ComputedLengthPercentage::hundred_percent_minus(length, AllowedNumericType::All)
@@ -1510,6 +1649,59 @@ pub trait Side {
 
     /// Returns whether this side is the start side.
     fn is_start(&self) -> bool;
+
+    /// Returns whether this side is the physical start side for a writing mode.
+    fn is_start_in(&self, _: WritingMode) -> bool {
+        self.is_start()
+    }
+}
+
+impl Side for BackgroundPositionXKeyword {
+    #[inline]
+    fn start() -> Self {
+        Self::Left
+    }
+
+    #[inline]
+    fn is_start(&self) -> bool {
+        matches!(self, Self::Left | Self::XStart)
+    }
+
+    fn is_start_in(&self, writing_mode: WritingMode) -> bool {
+        let x_start_is_left = if writing_mode.is_vertical() {
+            writing_mode.is_vertical_lr()
+        } else {
+            writing_mode.is_bidi_ltr()
+        };
+        match self {
+            Self::Left => true,
+            Self::Right => false,
+            Self::XStart => x_start_is_left,
+            Self::XEnd => !x_start_is_left,
+        }
+    }
+}
+
+impl Side for BackgroundPositionYKeyword {
+    #[inline]
+    fn start() -> Self {
+        Self::Top
+    }
+
+    #[inline]
+    fn is_start(&self) -> bool {
+        matches!(self, Self::Top | Self::YStart)
+    }
+
+    fn is_start_in(&self, writing_mode: WritingMode) -> bool {
+        let y_start_is_top = !writing_mode.is_vertical() || writing_mode.is_inline_tb();
+        match self {
+            Self::Top => true,
+            Self::Bottom => false,
+            Self::YStart => y_start_is_top,
+            Self::YEnd => !y_start_is_top,
+        }
+    }
 }
 
 impl Side for HorizontalPositionKeyword {

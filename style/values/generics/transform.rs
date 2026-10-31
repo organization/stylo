@@ -230,10 +230,10 @@ where
     #[css(comma, function)]
     Skew(Angle, #[css(skip_if = "Zero::is_zero")] Angle),
     /// skewX(angle)
-    #[css(function = "skewX")]
+    #[css(function = "skewx")]
     SkewX(Angle),
     /// skewY(angle)
-    #[css(function = "skewY")]
+    #[css(function = "skewy")]
     SkewY(Angle),
     /// translate(x, y) or translate(x)
     #[css(comma, function)]
@@ -242,13 +242,13 @@ where
         #[css(skip_if = "ZeroNoPercent::is_zero_no_percent")] LengthPercentage,
     ),
     /// translateX(x)
-    #[css(function = "translateX")]
+    #[css(function = "translatex")]
     TranslateX(LengthPercentage),
     /// translateY(y)
-    #[css(function = "translateY")]
+    #[css(function = "translatey")]
     TranslateY(LengthPercentage),
     /// translateZ(z)
-    #[css(function = "translateZ")]
+    #[css(function = "translatez")]
     TranslateZ(Length),
     /// translate3d(x, y, z)
     #[css(comma, function = "translate3d")]
@@ -259,13 +259,13 @@ where
     #[css(comma, function)]
     Scale(Number, #[css(contextual_skip_if = "is_same")] Number),
     /// scaleX(factor)
-    #[css(function = "scaleX")]
+    #[css(function = "scalex")]
     ScaleX(Number),
     /// scaleY(factor)
-    #[css(function = "scaleY")]
+    #[css(function = "scaley")]
     ScaleY(Number),
     /// scaleZ(factor)
-    #[css(function = "scaleZ")]
+    #[css(function = "scalez")]
     ScaleZ(Number),
     /// scale3D(factorX, factorY, factorZ)
     #[css(comma, function = "scale3d")]
@@ -276,13 +276,13 @@ where
     #[css(function)]
     Rotate(Angle),
     /// Rotation in 3D space around the x-axis.
-    #[css(function = "rotateX")]
+    #[css(function = "rotatex")]
     RotateX(Angle),
     /// Rotation in 3D space around the y-axis.
-    #[css(function = "rotateY")]
+    #[css(function = "rotatey")]
     RotateY(Angle),
     /// Rotation in 3D space around the z-axis.
-    #[css(function = "rotateZ")]
+    #[css(function = "rotatez")]
     RotateZ(Angle),
     /// Rotation in 3D space.
     ///

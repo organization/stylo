@@ -581,7 +581,7 @@ pub mod ${property.ident} {
         ) -> Result<(), ParseError> {
             #[allow(unused_imports)]
             use crate::properties::{NonCustomPropertyId, LonghandId};
-            % if not shorthand.kind and "IS_LEGACY_SHORTHAND" not in shorthand.flags:
+            % if not shorthand.kind and ("IS_LEGACY_SHORTHAND" not in shorthand.flags or len(shorthand.sub_properties) > 1):
             use crate::properties::shorthands::${shorthand.ident}::parse_value;
             % endif
             input.parse_entirely(|input| parse_value(context, input)).map(|longhands| {
@@ -619,7 +619,7 @@ pub mod ${property.ident} {
         % if shorthand.kind == "single_border":
         ${self.single_border_shorthand(shorthand)}
         % endif
-        % if "IS_LEGACY_SHORTHAND" in shorthand.flags:
+        % if "IS_LEGACY_SHORTHAND" in shorthand.flags and len(shorthand.sub_properties) == 1:
         ${self.legacy_shorthand(shorthand)}
         % endif
     }

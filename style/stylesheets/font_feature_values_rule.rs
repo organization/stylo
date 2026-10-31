@@ -477,5 +477,10 @@ font_feature_values_blocks! {
                  Specifies a feature name that will work with the character-variant() \
                  functional notation of font-variant-alternates. The value can be a list."]
         "styleset" styleset / Styleset / NS_FONT_VARIANT_ALTERNATES_STYLESET: VectorValues,
+
+        #[doc = "A @historical-forms block. \
+                 Specifies a feature name for the historical forms of \
+                 font-variant-alternates."]
+        "historical-forms" historical_forms / HistoricalForms / NS_FONT_VARIANT_ALTERNATES_HISTORICAL: SingleValue,
     ]
 }

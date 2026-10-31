@@ -35,7 +35,8 @@ use crate::typed_om::TypedValueList;
 use crate::values::computed::Context;
 use cssparser::{
     AtRuleParser, CowRcStr, DeclarationParser, Delimiter, ParseErrorKind, Parser, ParserState,
-    QualifiedRuleParser, RuleBodyItemParser, RuleBodyParser, SourceLocation, parse_important,
+    QualifiedRuleParser, RuleBodyItemParser, RuleBodyParser, SourceLocation, Token,
+    parse_important,
 };
 use itertools::Itertools;
 use selectors::SelectorList;
@@ -1839,16 +1840,40 @@ pub fn parse_property_declaration_list(
         context,
         state: &mut state,
     };
-    let mut iter = RuleBodyParser::new(input, &mut parser);
-    while let Some(declaration) = iter.next() {
-        match declaration {
-            Ok(()) => {},
-            Err((error, slice, location)) => {
-                let parser = &mut *iter.parser;
-                parser
-                    .state
-                    .did_error(parser.context, error, slice, location)
-            },
+    loop {
+        // HACK: cssparser 0.38 skips a top-level `}` instead of starting a bad declaration there,
+        // as https://drafts.csswg.org/css-syntax/#parse-list-of-declarations requires. Remove
+        // this once a release has https://github.com/servo/rust-cssparser/commit/3a1d1c7.
+        while input
+            .try_parse(|input| {
+                input.skip_whitespace();
+                input.expect_semicolon()
+            })
+            .is_ok()
+        {}
+        let start = input.state();
+        if let Ok(&Token::CloseCurlyBracket) = input.next() {
+            let _ = input.parse_until_after(Delimiter::Semicolon, |input| {
+                while input.next().is_ok() {}
+                Ok::<_, ParseError>(())
+            });
+            let error = ParseError::unexpected_token();
+            let slice = input.slice_from(start.position());
+            parser
+                .state
+                .did_error(parser.context, error, slice, start.source_location());
+            continue;
+        }
+        input.reset(&start);
+        let mut iter = RuleBodyParser::new(input, &mut parser);
+        let Some(declaration) = iter.next() else {
+            break;
+        };
+        if let Err((error, slice, location)) = declaration {
+            let parser = &mut *iter.parser;
+            parser
+                .state
+                .did_error(parser.context, error, slice, location)
         }
     }
     parser

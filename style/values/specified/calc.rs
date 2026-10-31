@@ -1560,6 +1560,24 @@ impl CalcNode {
         })
     }
 
+    /// Tries to simplify this expression into an `<angle-percentage>` value.
+    fn into_angle_or_percentage(
+        mut self,
+        clamping_mode: AllowedNumericType,
+    ) -> Result<CalcNumeric, ()> {
+        self.simplify_and_sort();
+
+        let ty = self.numeric_type_as_calc_type()?;
+        if ty != CalcType::Angle && ty != CalcType::Percentage {
+            return Err(());
+        }
+
+        Ok(CalcNumeric {
+            clamping_mode,
+            node: self,
+        })
+    }
+
     /// Tries to convert this expression into a `CalcNumeric`, keeping the
     /// AST for later evaluation at computed-value time.
     fn into_number(mut self, clamping_mode: AllowedNumericType) -> Result<CalcNumeric, ()> {
@@ -1700,6 +1718,23 @@ impl CalcNode {
             CalcParseFlags::new(percentage_context),
         )?
         .into_angle(AllowedNumericType::All)
+        .map_err(|()| ParseError::custom(StyleParseErrorKind::UnspecifiedError))
+    }
+
+    /// Convenience parsing function for `<angle-percentage>`, where the percentages are relative
+    /// to a full turn and stay unresolved.
+    pub fn parse_angle_or_percentage(
+        context: &ParserContext,
+        input: &mut Parser,
+        function: MathFunction,
+    ) -> Result<CalcNumeric, ParseError> {
+        Self::parse(
+            context,
+            input,
+            function,
+            CalcParseFlags::new(PercentageContext::allowed_with_hint(NumericBaseType::Angle)),
+        )?
+        .into_angle_or_percentage(AllowedNumericType::All)
         .map_err(|()| ParseError::custom(StyleParseErrorKind::UnspecifiedError))
     }
 

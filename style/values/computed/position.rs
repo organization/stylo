@@ -41,6 +41,12 @@ pub type HorizontalPosition = LengthPercentage;
 /// The computed value of a CSS vertical position.
 pub type VerticalPosition = LengthPercentage;
 
+/// The computed value of a `background-position-x` item.
+pub type BackgroundPositionX = LengthPercentage;
+
+/// The computed value of a `background-position-y` item.
+pub type BackgroundPositionY = LengthPercentage;
+
 /// The computed value of anchor side.
 pub type AnchorSide = GenericAnchorSide<Percentage>;
 

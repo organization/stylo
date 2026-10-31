@@ -11,10 +11,11 @@ use crate::properties::{LonghandId, PropertyDeclarationId, PropertyId};
 pub use crate::typed_om::{KeywordValue, ToTyped, TypedValue};
 use crate::values::CustomIdent;
 use crate::values::computed::{Context, ToComputedValue};
+pub use crate::values::generics::box_::BlockEllipsis;
 use crate::values::generics::box_::{
-    BaselineShiftKeyword, BlockEllipsis, GenericBaselineShift, GenericContainIntrinsicSize,
-    GenericLineClamp, GenericOverflowClipMargin, GenericPerspective, GenericScrollbarInset,
-    MaxLines, OverflowClipMarginBox,
+    BaselineShiftKeyword, GenericBaselineShift, GenericContainIntrinsicSize, GenericLineClamp,
+    GenericMaxLines, GenericOverflowClipMargin, GenericPerspective, GenericScrollbarInset,
+    OverflowClipMarginBox,
 };
 use crate::values::specified::length::{Length, LengthPercentage, NonNegativeLength};
 use crate::values::specified::{AllowQuirks, NonNegativeNumberOrPercentage, PositiveInteger};
@@ -1429,7 +1430,36 @@ impl Parse for ContainIntrinsicSize {
     }
 }
 
-impl Parse for MaxLines<PositiveInteger> {
+/// A specified value for the `max-lines` property.
+pub type MaxLines = GenericMaxLines<PositiveInteger>;
+
+/// https://drafts.csswg.org/css-overflow-4/#propdef-continue
+#[allow(missing_docs)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    MallocSizeOf,
+    Parse,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToComputedValue,
+    ToCss,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+#[repr(u8)]
+pub enum Continue {
+    Normal,
+    Discard,
+    Collapse,
+    #[css(keyword = "-webkit-legacy")]
+    WebkitLegacy,
+}
+
+impl Parse for MaxLines {
     fn parse(context: &ParserContext, input: &mut Parser) -> Result<Self, ParseError> {
         let mut lines = None;
         let mut auto = false;
