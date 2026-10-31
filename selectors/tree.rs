@@ -80,6 +80,11 @@ pub trait Element: Sized + Copy + Clone + Debug {
     /// Skips non-element nodes
     fn first_element_child(&self) -> Option<Self>;
 
+    /// Whether `matches` returns true for any element in the flattened assigned nodes of this slot.
+    fn any_flattened_slotted_element<F: FnMut(Self) -> bool>(&self, _matches: F) -> bool {
+        false
+    }
+
     /// The first element child of this element's shadow root, if it is a shadow host. `:has()`
     /// on a featureless shadow host looks at the shadow tree instead of the children.
     fn shadow_root_first_element_child(&self) -> Option<Self> {

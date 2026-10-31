@@ -304,6 +304,11 @@ pub trait Parser<'i> {
         false
     }
 
+    /// Whether to parse the compound selector argument of `:has-slotted()`.
+    fn parse_has_slotted_argument(&self) -> bool {
+        false
+    }
+
     /// Whether to parse the '&' delimiter as a parent selector.
     fn parse_parent_selector(&self) -> bool {
         false
@@ -1360,6 +1365,13 @@ impl<Impl: SelectorImpl> Selector<Impl> {
                     &mut flags,
                     forbidden_flags,
                 )),
+                HasSlotted(ref selector) => HasSlotted(replace_parent_on_selector(
+                    selector,
+                    parent,
+                    &mut specificity,
+                    &mut flags,
+                    forbidden_flags,
+                )),
             }
         });
         let mut items = UniqueArc::from_header_and_iter(Default::default(), iter);
@@ -2141,6 +2153,11 @@ pub enum Component<Impl: SelectorImpl> {
     ///
     /// See https://github.com/w3c/csswg-drafts/issues/2158
     Slotted(Selector<Impl>),
+    /// The `:has-slotted()` pseudo-class with a compound selector argument, which matches a slot
+    /// when one of its flattened assigned elements matches the argument.
+    ///
+    /// https://github.com/w3c/csswg-drafts/pull/10586
+    HasSlotted(Selector<Impl>),
     /// The `::part` pseudo-element.
     ///   https://drafts.csswg.org/css-shadow-parts/#part
     Part(#[cfg_attr(feature = "to_shmem", shmem(field_bound))] Box<[Impl::Identifier]>),
@@ -2239,7 +2256,7 @@ impl<Impl: SelectorImpl> Component<Impl> {
         }
 
         match *self {
-            Slotted(ref selector) => {
+            Slotted(ref selector) | HasSlotted(ref selector) => {
                 if !selector.visit(visitor) {
                     return false;
                 }
@@ -2610,6 +2627,11 @@ impl<Impl: SelectorImpl> ToCss for Component<Impl> {
             Combinator(ref c) => c.to_css(dest),
             Slotted(ref selector) => {
                 dest.write_str("::slotted(")?;
+                selector.to_css(dest)?;
+                dest.write_char(')')
+            },
+            HasSlotted(ref selector) => {
+                dest.write_str(":has-slotted(")?;
                 selector.to_css(dest)?;
                 dest.write_char(')')
             },
@@ -3544,6 +3566,12 @@ where
         SelectorParsingState::AFTER_NON_ELEMENT_BACKED_PSEUDO | SelectorParsingState::AFTER_SLOTTED,
     ) {
         return Err(ParseError::custom(SelectorParseErrorKind::InvalidState));
+    }
+
+    if name.eq_ignore_ascii_case("has-slotted") && parser.parse_has_slotted_argument() {
+        return Ok(Component::HasSlotted(parse_inner_compound_selector(
+            parser, input, state,
+        )?));
     }
 
     let after_part = state.intersects(SelectorParsingState::AFTER_PART_LIKE);

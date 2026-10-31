@@ -1290,6 +1290,21 @@ where
         Component::Slotted(ref selector) => {
             return matches_slotted(element, selector, context.shared, rightmost);
         },
+        Component::HasSlotted(ref selector) => {
+            let context = &mut *context.shared;
+            element.is_html_slot_element()
+                && element.any_flattened_slotted_element(|slotted| {
+                    context.nest(|context| {
+                        matches_complex_selector(
+                            selector.iter(),
+                            slotted,
+                            context,
+                            SubjectOrPseudoElement::No,
+                        )
+                        .to_bool(true)
+                    })
+                })
+        },
         Component::PseudoElement(ref pseudo) => {
             element.match_pseudo_element(pseudo, context.shared)
         },

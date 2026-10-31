@@ -1026,6 +1026,11 @@ impl<'a, 'i> ::selectors::Parser<'i> for SelectorParser<'a> {
     }
 
     #[inline]
+    fn parse_has_slotted_argument(&self) -> bool {
+        crate::pref!("layout.css.has-slotted-argument.enabled")
+    }
+
+    #[inline]
     fn parse_parent_selector(&self) -> bool {
         true
     }

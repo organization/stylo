@@ -42,6 +42,7 @@
 "layout.css.block-step.enabled" = false
 "layout.css.grid-template-subgrid-value.enabled" = false
 "layout.css.has-selector.enabled" = false
+"layout.css.has-slotted-argument.enabled" = false
 "layout.css.hyphens.enabled" = false
 "layout.css.image-orientation.enabled" = false
 "layout.css.initial-letter.enabled" = false

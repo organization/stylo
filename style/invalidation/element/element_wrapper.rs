@@ -339,6 +339,11 @@ where
         Some(Self::new(child, self.snapshots))
     }
 
+    fn any_flattened_slotted_element<F: FnMut(Self) -> bool>(&self, mut matches: F) -> bool {
+        self.element
+            .any_flattened_slotted_element(|slotted| matches(Self::new(slotted, self.snapshots)))
+    }
+
     fn shadow_root_first_element_child(&self) -> Option<Self> {
         let child = self.element.shadow_root_first_element_child()?;
         Some(Self::new(child, self.snapshots))
