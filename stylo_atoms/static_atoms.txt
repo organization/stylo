@@ -196,6 +196,7 @@ show
 signalingstatechange
 slotchange
 snapped
+fallback
 squeeze
 squeezeend
 squeezestart

@@ -9,7 +9,7 @@
 use crate::computed_value_flags::ComputedValueFlags;
 use crate::dom::{AttributeTracker, TElement};
 use crate::logical_geometry::{LogicalSize, PhysicalSide, WritingMode};
-use crate::parser::ParserContext;
+use crate::parser::{Parse, ParserContext};
 use crate::properties::ComputedValues;
 use crate::queries::feature::{AllowsRanges, Evaluator, FeatureFlags, QueryFeatureDescription};
 use crate::queries::values::Orientation;
@@ -22,6 +22,9 @@ use crate::stylesheets::{CssRules, CustomMediaEvaluator};
 use crate::stylist::Stylist;
 use crate::values::computed::{CSSPixelLength, ContainerType, Context, Ratio};
 use crate::values::specified::ContainerName;
+use crate::values::specified::position::{
+    PositionArea, PositionAreaAxis, PositionAreaKeyword, PositionTryFallbacksItem,
+};
 use crate::{LocalName, derives::*};
 use app_units::Au;
 use cssparser::{Parser, SourceLocation};
@@ -269,6 +272,14 @@ impl ContainerCondition {
             return TraversalResult::InProgress;
         }
 
+        if self
+            .flags
+            .contains(FeatureFlags::CONTAINER_REQUIRES_ANCHORED)
+            && !container_type.intersects(ContainerType::ANCHORED)
+        {
+            return TraversalResult::InProgress;
+        }
+
         // Filter by container-name.
         let container_name = box_style.get_container_name();
         for filter_name in self.name.0.iter() {
@@ -283,12 +294,16 @@ impl ContainerCondition {
         } else {
             ContainerScrollState::empty()
         };
+        let anchored = container_type
+            .intersects(ContainerType::ANCHORED)
+            .then(|| potential_container.query_anchored_fallback());
         let style = style.to_arc();
         TraversalResult::Done(ContainerLookupResult {
             element: potential_container,
             info: ContainerInfo {
                 size,
                 scroll_state,
+                anchored,
                 wm,
                 inherited_style: {
                     potential_container.traversal_parent().and_then(|parent| {
@@ -482,6 +497,7 @@ const STUCK_SHIFT: u16 = 8;
 pub struct ContainerInfo {
     size: Size2D<Option<Au>>,
     scroll_state: ContainerScrollState,
+    anchored: Option<(WritingMode, Option<PositionTryFallbacksItem>)>,
     wm: WritingMode,
     inherited_style: Option<Arc<ComputedValues>>,
 }
@@ -715,6 +731,64 @@ fn eval_snapped(context: &Context, value: Option<ScrollStateSnapped>) -> bool {
         Some(ScrollStateSnapped::Both) => x && y,
     }
 }
+
+/// The value of the `fallback` feature of an `anchored()` query.
+///
+/// https://drafts.csswg.org/css-anchor-position-2/#anchored-container-queries
+#[derive(Clone, Debug, MallocSizeOf, PartialEq, ToCss, ToShmem)]
+pub enum AnchoredFallback {
+    /// `none`: the container uses its base styles.
+    None,
+    /// A position option of `position-try-fallbacks`.
+    Item(PositionTryFallbacksItem),
+}
+
+impl Parse for AnchoredFallback {
+    fn parse(context: &ParserContext, input: &mut Parser) -> Result<Self, ParseError> {
+        if input.try_parse(|i| i.expect_ident_matching("none")).is_ok() {
+            return Ok(Self::None);
+        }
+        Ok(Self::Item(PositionTryFallbacksItem::parse(context, input)?))
+    }
+}
+
+fn eval_fallback(context: &Context, value: Option<&AnchoredFallback>) -> bool {
+    let Some(info) = context.container_info.as_ref() else {
+        return false;
+    };
+    let Some((cb_wm, ref applied)) = info.anchored else {
+        return false;
+    };
+    match (value, applied) {
+        (None, applied) => applied.is_some(),
+        (Some(AnchoredFallback::None), applied) => applied.is_none(),
+        (
+            Some(AnchoredFallback::Item(PositionTryFallbacksItem::PositionArea(queried))),
+            Some(PositionTryFallbacksItem::PositionArea(applied)),
+        ) => physical_tracks(*queried, cb_wm, info.wm) == physical_tracks(*applied, cb_wm, info.wm),
+        (Some(AnchoredFallback::Item(item)), applied) => applied.as_ref() == Some(item),
+    }
+}
+
+fn physical_tracks(area: PositionArea, cb_wm: WritingMode, wm: WritingMode) -> [Option<u8>; 2] {
+    let area = area.to_physical(cb_wm, wm);
+    let track = |keyword: PositionAreaKeyword| keyword.track().map(|track| track as u8);
+    if area.first.axis() == PositionAreaAxis::Vertical
+        || area.second.axis() == PositionAreaAxis::Horizontal
+    {
+        [track(area.second), track(area.first)]
+    } else {
+        [track(area.first), track(area.second)]
+    }
+}
+
+/// https://drafts.csswg.org/css-anchor-position-2/#anchored-container-queries
+pub static ANCHORED_FEATURES: [QueryFeatureDescription; 1] = [feature!(
+    atom!("fallback"),
+    AllowsRanges::No,
+    Evaluator::AnchoredFallback(eval_fallback),
+    FeatureFlags::CONTAINER_REQUIRES_ANCHORED,
+)];
 
 /// https://drafts.csswg.org/css-conditional-5/#scroll-state-container
 pub static SCROLL_STATE_FEATURES: [QueryFeatureDescription; 4] = [
