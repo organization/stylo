@@ -7,6 +7,7 @@
 //! [custom]: https://drafts.csswg.org/css-variables/
 
 use crate::FxHashMap;
+use crate::applicable_declarations::RevertKind;
 use crate::custom_properties_map::{CustomPropertiesMap, OwnMap};
 use crate::device::Device;
 use crate::dom::AttributeTracker;
@@ -1596,6 +1597,10 @@ pub fn handle_invalid_at_computed_value_time(
 }
 
 /// Replace `var()`, `env()`, and `attr()` functions in a pre-existing variable value.
+///
+/// If a custom property substitutes to `revert`, `revert-layer` or `revert-rule`, nothing is applied
+/// and the revert kind is returned, so that the caller can roll back the cascade.
+#[must_use]
 pub fn substitute_references_if_needed_and_apply(
     name: &Name,
     kind: SubstitutionFunctionKind,
@@ -1603,7 +1608,7 @@ pub fn substitute_references_if_needed_and_apply(
     stylist: &Stylist,
     context: &mut computed::Context,
     attribute_tracker: &mut AttributeTracker,
-) {
+) -> Option<RevertKind> {
     debug_assert_ne!(kind, SubstitutionFunctionKind::Env);
     let is_var = matches!(kind, SubstitutionFunctionKind::Var);
     let registration = stylist.get_custom_property_registration(name);
@@ -1614,7 +1619,7 @@ pub fn substitute_references_if_needed_and_apply(
             .builder
             .substitution_functions
             .insert_var(registration, name, computed_value);
-        return;
+        return None;
     }
 
     let url_data = &value.url_data;
@@ -1635,62 +1640,22 @@ pub fn substitute_references_if_needed_and_apply(
         } else {
             context.builder.substitution_functions.remove_attr(name);
         }
-        return;
+        return None;
     };
 
     // If variable fallback results in a wide keyword, deal with it now.
-    let inherited = context.builder.inherited_style.custom_properties();
     if is_var {
-        let css = &substitution.css;
         let css_wide_kw = {
-            let mut input = Parser::new(css);
+            let mut input = Parser::new(&substitution.css);
             input.try_parse(CSSWideKeyword::parse)
         };
 
         if let Ok(kw) = css_wide_kw {
-            // TODO: It's unclear what this should do for revert / revert-layer, see
-            // https://github.com/w3c/csswg-drafts/issues/9131. For now treating as unset
-            // seems fine?
-            match (kw, registration.inherits(), context.is_root_element()) {
-                (CSSWideKeyword::Initial, _, _)
-                | (CSSWideKeyword::Revert, false, _)
-                | (CSSWideKeyword::RevertLayer, false, _)
-                | (CSSWideKeyword::RevertRule, false, _)
-                | (CSSWideKeyword::Unset, false, _)
-                | (CSSWideKeyword::Revert, true, true)
-                | (CSSWideKeyword::RevertLayer, true, true)
-                | (CSSWideKeyword::RevertRule, true, true)
-                | (CSSWideKeyword::Unset, true, true)
-                | (CSSWideKeyword::Inherit, _, true) => {
-                    remove_and_insert_initial_value(
-                        name,
-                        registration,
-                        &mut context.builder.substitution_functions,
-                    );
-                },
-                (CSSWideKeyword::Revert, true, false)
-                | (CSSWideKeyword::RevertLayer, true, false)
-                | (CSSWideKeyword::RevertRule, true, false)
-                | (CSSWideKeyword::Inherit, _, false)
-                | (CSSWideKeyword::Unset, true, false) => {
-                    match inherited.get(registration, name) {
-                        Some(value) => {
-                            context.builder.substitution_functions.insert_var(
-                                registration,
-                                name,
-                                value.clone(),
-                            );
-                        },
-                        None => {
-                            context
-                                .builder
-                                .substitution_functions
-                                .remove_var(registration, name);
-                        },
-                    };
-                },
+            if let Some(revert_kind) = kw.revert_kind() {
+                return Some(revert_kind);
             }
-            return;
+            apply_css_wide_keyword(name, registration, kw, context);
+            return None;
         }
     }
 
@@ -1705,7 +1670,7 @@ pub fn substitute_references_if_needed_and_apply(
                 Ok(v) => v,
                 Err(()) => {
                     handle_invalid_at_computed_value_time(name, registration, context);
-                    return;
+                    return None;
                 },
             };
             context
@@ -1727,6 +1692,57 @@ pub fn substitute_references_if_needed_and_apply(
                 .insert_attr(name, value);
         },
         SubstitutionFunctionKind::Env => unreachable!("Kind cannot be env."),
+    }
+    None
+}
+
+/// Applies a CSS-wide keyword to a custom property. The revert keywords act like `unset`, for
+/// callers that have no declaration left to roll back to.
+pub(crate) fn apply_css_wide_keyword(
+    name: &Name,
+    registration: &PropertyDescriptors,
+    keyword: CSSWideKeyword,
+    context: &mut computed::Context,
+) {
+    match (keyword, registration.inherits(), context.is_root_element()) {
+        (CSSWideKeyword::Initial, _, _)
+        | (CSSWideKeyword::Revert, false, _)
+        | (CSSWideKeyword::RevertLayer, false, _)
+        | (CSSWideKeyword::RevertRule, false, _)
+        | (CSSWideKeyword::Unset, false, _)
+        | (CSSWideKeyword::Revert, true, true)
+        | (CSSWideKeyword::RevertLayer, true, true)
+        | (CSSWideKeyword::RevertRule, true, true)
+        | (CSSWideKeyword::Unset, true, true)
+        | (CSSWideKeyword::Inherit, _, true) => {
+            remove_and_insert_initial_value(
+                name,
+                registration,
+                &mut context.builder.substitution_functions,
+            );
+        },
+        (CSSWideKeyword::Revert, true, false)
+        | (CSSWideKeyword::RevertLayer, true, false)
+        | (CSSWideKeyword::RevertRule, true, false)
+        | (CSSWideKeyword::Inherit, _, false)
+        | (CSSWideKeyword::Unset, true, false) => {
+            let inherited = context.builder.inherited_style.custom_properties();
+            match inherited.get(registration, name) {
+                Some(value) => {
+                    context.builder.substitution_functions.insert_var(
+                        registration,
+                        name,
+                        value.clone(),
+                    );
+                },
+                None => {
+                    context
+                        .builder
+                        .substitution_functions
+                        .remove_var(registration, name);
+                },
+            };
+        },
     }
 }
 

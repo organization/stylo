@@ -12,9 +12,9 @@ use crate::context::TreeCountingCaches;
 use crate::custom_properties::{
     ComputedCustomProperties, ComputedSubstitutionFunctions, Name, NonCustomReferenceMap,
     ReferenceFlags, References, SingleNonCustomReference, SubstitutionFunctionKind, VariableValue,
-    get_attr_value_for_cycle_resolution, handle_invalid_at_computed_value_time,
-    remove_and_insert_initial_value, substitute_references_if_needed_and_apply,
-    substitute_var_name,
+    apply_css_wide_keyword, get_attr_value_for_cycle_resolution,
+    handle_invalid_at_computed_value_time, remove_and_insert_initial_value,
+    substitute_references_if_needed_and_apply, substitute_var_name,
 };
 use crate::dom::{AttributeTracker, DummyElementContext, ElementContext, TElement};
 #[cfg(feature = "gecko")]
@@ -705,9 +705,9 @@ struct RevertedSet {
 
 #[derive(Default)]
 struct SeenSubstitutionFunctions<'a> {
-    /// The boolean means whether the value may have references. If false, we don't need to bother
-    /// performing lookups for cycle detection.
-    var: PrecomputedHashMap<&'a Name, bool>,
+    /// The priority of the winning declaration if its value may have references. If none, we don't
+    /// need to bother performing lookups for cycle detection.
+    var: PrecomputedHashMap<&'a Name, Option<CascadePriority>>,
     attr: PrecomputedHashSet<&'a Name>,
 }
 
@@ -811,7 +811,15 @@ pub(crate) struct Cascade<'a> {
     references_from_non_custom_properties: NonCustomReferenceMap<Vec<Arc<UnparsedValue>>>,
     /// Set of prioritary properties that have already been applied.
     ensured_prioritary: PrioritaryPropertyIdSet,
+    /// For custom properties whose winning declaration has references, the priority of that
+    /// declaration and the declarations it won over, which it can revert to after substitution.
+    custom_revert_candidates: PrecomputedHashMap<&'a Name, CustomRevertCandidates<'a>>,
 }
+
+type CustomRevertCandidates<'a> = (
+    CascadePriority,
+    SmallVec<[(&'a CustomDeclarationValue, CascadePriority); 1]>,
+);
 
 impl<'a> Cascade<'a> {
     fn new(
@@ -830,6 +838,7 @@ impl<'a> Cascade<'a> {
             may_have_custom_property_cycles: false,
             ensured_prioritary: PrioritaryPropertyIdSet::default(),
             references_from_non_custom_properties: Default::default(),
+            custom_revert_candidates: Default::default(),
         }
     }
 
@@ -847,6 +856,7 @@ impl<'a> Cascade<'a> {
             may_have_custom_property_cycles: false,
             ensured_prioritary: PrioritaryPropertyIdSet::default(),
             references_from_non_custom_properties: Default::default(),
+            custom_revert_candidates: Default::default(),
         }
     }
 
@@ -1758,14 +1768,23 @@ impl<'a> Cascade<'a> {
         }
 
         let entry = match self.seen.custom.var.entry(name) {
-            Entry::Occupied(..) => return,
+            Entry::Occupied(winner) => {
+                if let Some(winner) = *winner.get() {
+                    self.custom_revert_candidates
+                        .entry(name)
+                        .or_insert_with(|| (winner, SmallVec::new()))
+                        .1
+                        .push((value, priority));
+                }
+                return;
+            },
             Entry::Vacant(v) => v,
         };
 
         let registration = self.stylist.get_custom_property_registration(name);
         let initial_values = self.stylist.get_custom_property_initial_values();
         if !Self::value_may_affect_style(context, name, registration, initial_values, value) {
-            entry.insert(false);
+            entry.insert(None);
             return;
         }
 
@@ -1794,7 +1813,7 @@ impl<'a> Cascade<'a> {
             CustomDeclarationValue::CSSWideKeyword(..) => false,
         };
         self.may_have_custom_property_cycles |= has_references;
-        entry.insert(has_references);
+        entry.insert(has_references.then_some(priority));
 
         match value {
             CustomDeclarationValue::Unparsed(unparsed_value) => {
@@ -1802,7 +1821,7 @@ impl<'a> Cascade<'a> {
                     // If the variable value has no references to other properties, perform
                     // substitution here instead of forcing a full traversal in `substitute_all`
                     // afterwards.
-                    substitute_references_if_needed_and_apply(
+                    let revert_kind = substitute_references_if_needed_and_apply(
                         name,
                         SubstitutionFunctionKind::Var,
                         unparsed_value,
@@ -1811,6 +1830,13 @@ impl<'a> Cascade<'a> {
                         // We just checked there are no attr dependencies.
                         &mut AttributeTracker::new_dummy(),
                     );
+                    if let Some(revert_kind) = revert_kind {
+                        // Let the declarations this one reverts to apply.
+                        self.seen.custom.var.remove(name);
+                        self.reverted
+                            .custom
+                            .insert(name.clone(), (priority, revert_kind));
+                    }
                     return;
                 }
                 let value = ComputedRegisteredValue::universal(Arc::clone(unparsed_value));
@@ -2255,6 +2281,78 @@ fn substitute_all(
             }
         }
 
+        /// Substitutes and applies the value of a custom property or attribute. If a custom property
+        /// substitutes to a revert keyword, rolls the cascade back to the declarations it won over.
+        /// https://drafts.csswg.org/css-cascade-5/#revert-keyword
+        fn apply_value(
+            &mut self,
+            name: &Name,
+            kind: SubstitutionFunctionKind,
+            value: &Arc<VariableValue>,
+            attribute_tracker: &mut AttributeTracker,
+        ) {
+            let Some(revert_kind) = substitute_references_if_needed_and_apply(
+                name,
+                kind,
+                value,
+                self.stylist,
+                self.computed_context,
+                attribute_tracker,
+            ) else {
+                return;
+            };
+            let registration = self.stylist.get_custom_property_registration(name);
+            if let Some((winner, candidates)) =
+                self.cascade.custom_revert_candidates.get(name).cloned()
+            {
+                let mut reverted = (winner, revert_kind);
+                for (value, priority) in candidates {
+                    if !reverted.0.allows_when_reverted(&priority, reverted.1) {
+                        continue;
+                    }
+                    let revert_kind = match *value {
+                        CustomDeclarationValue::Unparsed(ref value) => {
+                            substitute_references_if_needed_and_apply(
+                                name,
+                                SubstitutionFunctionKind::Var,
+                                value,
+                                self.stylist,
+                                self.computed_context,
+                                attribute_tracker,
+                            )
+                        },
+                        CustomDeclarationValue::Parsed(ref value) => {
+                            let value = value.to_computed_value(self.computed_context);
+                            self.map_mut().insert_var(registration, name, value);
+                            None
+                        },
+                        CustomDeclarationValue::CSSWideKeyword(keyword) => {
+                            let revert_kind = keyword.revert_kind();
+                            if revert_kind.is_none() {
+                                apply_css_wide_keyword(
+                                    name,
+                                    registration,
+                                    keyword,
+                                    self.computed_context,
+                                );
+                            }
+                            revert_kind
+                        },
+                    };
+                    match revert_kind {
+                        Some(revert_kind) => reverted = (priority, revert_kind),
+                        None => return,
+                    }
+                }
+            }
+            apply_css_wide_keyword(
+                name,
+                registration,
+                CSSWideKeyword::Unset,
+                self.computed_context,
+            );
+        }
+
         /// Applies a prioritary property (and its dependencies) while resolving custom properties.
         ///
         /// The in-progress map lives outside `computed_context` during traversal; we move it into
@@ -2521,14 +2619,7 @@ fn substitute_all(
                         // turned out not to. Note that if this was already computed we would've
                         // bailed out in the as_universal() check.
                         let value = value.clone();
-                        substitute_references_if_needed_and_apply(
-                            name,
-                            kind,
-                            &value,
-                            context.stylist,
-                            context.computed_context,
-                            attribute_tracker,
-                        );
+                        context.apply_value(name, kind, &value, attribute_tracker);
                     }
                     return None;
                 }
@@ -2710,14 +2801,7 @@ fn substitute_all(
                     };
                     // We know we're not in a loop now, perform substitution.
                     // TODO(emilio): Merge with the cycle detection loop instead?
-                    substitute_references_if_needed_and_apply(
-                        name,
-                        kind,
-                        v,
-                        context.stylist,
-                        context.computed_context,
-                        attribute_tracker,
-                    );
+                    context.apply_value(name, kind, v, attribute_tracker);
                 }
             },
             VarType::NonCustom(non_custom) => {
@@ -2756,8 +2840,8 @@ fn substitute_all(
     // Note that `seen` doesn't contain names inherited from our parent, but
     // those can't have variable references (since we inherit the computed
     // variables) so we don't want to spend cycles traversing them anyway.
-    for (var, has_refs) in &seen.var {
-        if !has_refs {
+    for (var, winner) in &seen.var {
+        if winner.is_none() {
             continue;
         }
         run_one(VarType::Custom((*var).clone()));
