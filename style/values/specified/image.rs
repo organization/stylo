@@ -231,20 +231,18 @@ impl Image {
             return Ok(generic::Image::ImageSet(Box::new(is)));
         }
 
-        if flags.contains(ParseImageFlags::FORBID_NON_URL) {
-            return Err(ParseError::custom(StyleParseErrorKind::UnspecifiedError));
-        }
-
-        if let Ok(gradient) = input.try_parse(|i| Gradient::parse(context, i)) {
+        // light-dark() of urls is still a url-only image.
+        let any = !flags.contains(ParseImageFlags::FORBID_NON_URL);
+        if any && let Ok(gradient) = input.try_parse(|i| Gradient::parse(context, i)) {
             return Ok(generic::Image::Gradient(Box::new(gradient)));
         }
 
         let function = input.expect_function()?.clone();
         input.parse_nested_block(|input| Ok(match_ignore_ascii_case! { &function,
             #[cfg(feature = "servo")]
-            "paint" => Self::PaintWorklet(Box::new(<PaintWorklet>::parse_args(context, input)?)),
-            "cross-fade" if cross_fade_enabled() => Self::CrossFade(Box::new(CrossFade::parse_args(context, input, cors_mode, flags)?)),
-            "image" => Self::Image(Box::new(Color::parse(context, input)?)),
+            "paint" if any => Self::PaintWorklet(Box::new(<PaintWorklet>::parse_args(context, input)?)),
+            "cross-fade" if any && cross_fade_enabled() => Self::CrossFade(Box::new(CrossFade::parse_args(context, input, cors_mode, flags)?)),
+            "image" if any => Self::Image(Box::new(Color::parse(context, input)?)),
             "light-dark" if crate::pref!("layout.css.light-dark.images.enabled", gecko = true) => {
                 Self::LightDark(Box::new(GenericLightDark::parse_args_with(input, |input| {
                     // `none` in `light-dark()` has a special meaning.
@@ -252,9 +250,9 @@ impl Image {
                 })?))
             },
             #[cfg(feature = "gecko")]
-            "-moz-element" => Self::Element(Self::parse_element(input)?),
+            "-moz-element" if any => Self::Element(Self::parse_element(input)?),
             #[cfg(feature = "gecko")]
-            "-moz-symbolic-icon" if context.chrome_rules_enabled() => Self::MozSymbolicIcon(input.expect_ident()?.as_ref().into()),
+            "-moz-symbolic-icon" if any && context.chrome_rules_enabled() => Self::MozSymbolicIcon(input.expect_ident()?.as_ref().into()),
             _ => return Err(ParseError::custom(StyleParseErrorKind::UnexpectedFunction)),
         }))
     }

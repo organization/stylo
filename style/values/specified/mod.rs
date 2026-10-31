@@ -126,9 +126,9 @@ pub use self::text::{
     WordSpaceTransform,
 };
 pub use self::text::{
-    HyphenateCharacter, HyphenateLimitChars, Hyphens, RubyAlign, RubyPosition, TextCombineUpright,
-    TextDecorationStyle, TextRendering, TextSecurity, TextSizeAdjust, TextWrapMode, TextWrapStyle,
-    UnicodeBidi, WhiteSpaceCollapse,
+    HyphenateCharacter, HyphenateLimitChars, HyphenateLimitLines, Hyphens, RubyAlign, RubyMerge,
+    RubyOverhang, RubyPosition, TextCombineUpright, TextDecorationStyle, TextRendering,
+    TextSecurity, TextSizeAdjust, TextWrapMode, TextWrapStyle, UnicodeBidi, WhiteSpaceCollapse,
 };
 pub use self::text::{InitialLetter, LetterSpacing, LineBreak, TextAlign, TextIndent};
 pub use self::text::{OverflowWrap, TextEmphasisPosition, TextEmphasisStyle, WordBreak};

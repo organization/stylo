@@ -87,11 +87,11 @@ pub struct GenericCrossFade<Image, Color, Percentage> {
 )]
 #[repr(C)]
 pub struct GenericCrossFadeElement<Image, Color, Percentage> {
-    /// The percent of the final image that `image` will be.
-    pub percent: Optional<Percentage>,
     /// A color or image that will be blended when cross-fade is
     /// evaluated.
     pub image: GenericCrossFadeImage<Image, Color>,
+    /// The percent of the final image that `image` will be.
+    pub percent: Optional<Percentage>,
 }
 
 /// An image or a color. `cross-fade` takes either when blending

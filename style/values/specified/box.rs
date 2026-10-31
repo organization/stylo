@@ -10,6 +10,7 @@ use crate::parser::{Parse, ParserContext};
 use crate::properties::{LonghandId, PropertyDeclarationId, PropertyId};
 pub use crate::typed_om::{KeywordValue, ToTyped, TypedValue};
 use crate::values::CustomIdent;
+use crate::values::computed::{Context, ToComputedValue};
 use crate::values::generics::box_::{
     BaselineShiftKeyword, BlockEllipsis, GenericBaselineShift, GenericContainIntrinsicSize,
     GenericLineClamp, GenericOverflowClipMargin, GenericPerspective, GenericScrollbarInset,
@@ -864,6 +865,7 @@ pub enum ScrollSnapAxis {
     Block,
     Inline,
     Both,
+    Pair,
 }
 
 /// https://drafts.csswg.org/css-scroll-snap-1/#snap-strictness
@@ -1348,7 +1350,6 @@ impl TouchAction {
     Parse,
     PartialEq,
     SpecifiedValueInfo,
-    ToComputedValue,
     ToCss,
     ToResolvedValue,
     ToShmem,
@@ -1356,7 +1357,7 @@ impl TouchAction {
 )]
 #[css(bitflags(
     single = "none,strict,content",
-    mixed = "size,layout,style,paint,inline-size",
+    mixed = "size,inline-size,layout,style,paint",
     overlapping_bits
 ))]
 #[repr(C)]
@@ -1382,6 +1383,28 @@ bitflags! {
         const CONTENT = 1 << 6 | Contain::LAYOUT.bits() | Contain::STYLE.bits() | Contain::PAINT.bits();
         /// `strict` variant, turns on all types of containment
         const STRICT = 1 << 7 | Contain::LAYOUT.bits() | Contain::STYLE.bits() | Contain::PAINT.bits() | Contain::SIZE.bits();
+    }
+}
+
+impl ToComputedValue for Contain {
+    type ComputedValue = Self;
+
+    /// The longhand forms of `strict` and `content` compute to the keywords.
+    #[inline]
+    fn to_computed_value(&self, _: &Context) -> Self {
+        let content = Self::LAYOUT | Self::STYLE | Self::PAINT;
+        if *self == content {
+            Self::CONTENT
+        } else if *self == content | Self::SIZE {
+            Self::STRICT
+        } else {
+            *self
+        }
+    }
+
+    #[inline]
+    fn from_computed_value(computed: &Self) -> Self {
+        *computed
     }
 }
 
@@ -2653,9 +2676,9 @@ pub enum BoxDirection {
 )]
 #[repr(u8)]
 pub enum BoxOrient {
-    #[cfg_attr(feature = "gecko", parse(aliases = "inline-axis"))]
+    #[parse(aliases = "inline-axis")]
     Horizontal,
-    #[cfg_attr(feature = "gecko", parse(aliases = "block-axis"))]
+    #[parse(aliases = "block-axis")]
     Vertical,
 }
 

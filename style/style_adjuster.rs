@@ -159,7 +159,6 @@ impl<'a, 'b: 'a> StyleAdjuster<'a, 'b> {
     /// This makes the element not be a flex container, with all that it
     /// implies, but it should be safe. It matches blink, see
     /// https://bugzilla.mozilla.org/show_bug.cgi?id=1786147#c10
-    #[cfg(feature = "gecko")]
     fn adjust_for_webkit_line_clamp(&mut self) {
         use crate::properties::longhands::_moz_box_orient::computed_value::T as BoxOrient;
         use crate::values::specified::box_::{DisplayInside, DisplayOutside};
@@ -411,6 +410,22 @@ impl<'a, 'b: 'a> StyleAdjuster<'a, 'b> {
     /// "Computed value: as specified, except with `visible`/`clip` computing to
     /// `auto`/`hidden` (respectively) if one of `overflow-x` or `overflow-y` is
     /// neither `visible` nor `clip`."
+    /// `outline-color: auto` computes to currentcolor unless `outline-style`
+    /// is `auto`.
+    /// <https://drafts.csswg.org/css-ui-4/#outline-color>
+    fn adjust_for_outline_color(&mut self) {
+        use crate::values::computed::OutlineStyle;
+        use crate::values::generics::color::{Color, ColorOrAuto};
+        let outline = self.style.get_outline();
+        if matches!(outline.get_outline_color(), ColorOrAuto::Auto)
+            && *outline.get_outline_style() != OutlineStyle::Auto
+        {
+            self.style
+                .mutate_outline()
+                .set_outline_color(ColorOrAuto::Color(Color::currentcolor()));
+        }
+    }
+
     fn adjust_for_overflow(&mut self) {
         let overflow_x = *self.style.get_box().get_overflow_x();
         let overflow_y = *self.style.get_box().get_overflow_y();
@@ -1052,9 +1067,9 @@ impl<'a, 'b: 'a> StyleAdjuster<'a, 'b> {
         }
         self.adjust_for_top_layer();
         self.blockify_if_necessary(layout_parent_style, element);
-        #[cfg(feature = "gecko")]
         self.adjust_for_webkit_line_clamp();
         self.adjust_for_position();
+        self.adjust_for_outline_color();
         self.adjust_for_overflow();
         #[cfg(feature = "gecko")]
         {

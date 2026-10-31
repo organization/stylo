@@ -93,12 +93,6 @@ pub(crate) fn parse_mix<Item: Clone>(
                     percentage = try_parse_percentage(input);
                 }
 
-                // TODO(Bug 2037742) - Enable calc()-expressions that can only be resolved at
-                // computed value time (due to relative lengths, sibling-index(), etc.).
-                if matches!(percentage, Some(ref p) if p.to_percentage().is_none()) {
-                    return Err(ParseError::custom(StyleParseErrorKind::UnspecifiedError));
-                }
-
                 items.push((color, percentage));
 
                 if input.try_parse(|i| i.expect_comma()).is_err() {
@@ -123,8 +117,9 @@ pub(crate) fn parse_mix<Item: Clone>(
             let (mut sum_specified, mut missing) = (0.0, 0);
             for (_, percentage) in items.iter() {
                 if let Some(p) = percentage {
-                    // Percentage was enforced to be resolvable at parse time.
-                    sum_specified += p.to_percentage().unwrap();
+                    // A percentage that can only be resolved at computed value time
+                    // is a calc(), which leaves the omitted percentages unresolved.
+                    sum_specified += p.to_percentage().unwrap_or(0.0);
                 } else {
                     missing += 1;
                 }
@@ -1278,6 +1273,8 @@ pub enum ForcedColorAdjust {
     Auto,
     /// Respect specified colors.
     None,
+    /// Use the parent's used color for properties that inherit by default.
+    PreserveParentColor,
 }
 
 /// Possible values for the forced-colors media query.

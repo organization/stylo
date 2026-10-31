@@ -35,6 +35,31 @@ pub enum NumberOrAuto<N> {
     Number(N),
 }
 
+/// A generic value for the `hyphenate-limit-lines` property: `no-limit | <integer>`.
+/// <https://drafts.csswg.org/css-text-4/#hyphenate-line-limits>
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    MallocSizeOf,
+    Parse,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToComputedValue,
+    ToCss,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+#[repr(C, u8)]
+#[typed(todo_derive_fields)]
+pub enum GenericHyphenateLimitLines<I> {
+    /// `no-limit`
+    NoLimit,
+    /// `<integer>`
+    Integer(I),
+}
+
 /// A generic value for the `hyphenate-limit-chars` property.
 #[derive(
     Animate,

@@ -97,6 +97,7 @@
 "layout.css.view-transitions.enabled" = false
 "layout.css.webkit-fill-available.all-size-properties.enabled" = true
 "layout.css.webkit-fill-available.enabled" = true
+"layout.css.webkit-box-orient.enabled" = false
 "layout.css.webkit-text-stroke.enabled" = false
 "layout.css.white-space-collapse.preserve-spaces.enabled" = false
 "layout.css.word-break.break-word.enabled" = false

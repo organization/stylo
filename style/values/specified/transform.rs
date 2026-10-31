@@ -37,14 +37,8 @@ pub type TransformOrigin = generic::TransformOrigin<
     Length,
 >;
 
-#[cfg(feature = "gecko")]
 fn all_transform_boxes_are_enabled(_context: &ParserContext) -> bool {
     true
-}
-
-#[cfg(feature = "servo")]
-fn all_transform_boxes_are_enabled(_context: &ParserContext) -> bool {
-    false
 }
 
 /// The specified value of `transform-box`.

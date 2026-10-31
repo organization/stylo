@@ -26,12 +26,13 @@ use thin_vec::ThinVec;
 
 pub use crate::values::specified::text::{
     HangingPunctuation, HangingPunctuationKeyword, HyphenateCharacter, Hyphens, LineBreak,
-    MozControlCharacterVisibility, OverflowWrap, RubyAlign, RubyPosition, TextAlignAll,
-    TextAlignLast, TextAutospace, TextBoxEdge, TextBoxTrim, TextCombineUpright, TextDecorationLine,
-    TextDecorationSkipInk, TextDecorationSkipSpaces, TextDecorationStyle, TextEmphasisPosition,
-    TextGroupAlign, TextJustify, TextOverflow, TextRendering, TextSecurity, TextSizeAdjust,
-    TextSpacingTrim, TextTransform, TextUnderlinePosition, TextWrapMode, TextWrapStyle,
-    UnicodeBidi, WhiteSpaceCollapse, WordBreak, WordSpaceTransform, WordSpaceTransformKeyword,
+    MozControlCharacterVisibility, OverflowWrap, RubyAlign, RubyMerge, RubyOverhang, RubyPosition,
+    TextAlignAll, TextAlignLast, TextAutospace, TextBoxEdge, TextBoxTrim, TextCombineUpright,
+    TextDecorationLine, TextDecorationSkipInk, TextDecorationSkipSpaces, TextDecorationStyle,
+    TextEmphasisPosition, TextGroupAlign, TextJustify, TextOverflow, TextRendering, TextSecurity,
+    TextSizeAdjust, TextSpacingTrim, TextTransform, TextUnderlinePosition, TextWrapMode,
+    TextWrapStyle, UnicodeBidi, WhiteSpaceCollapse, WordBreak, WordSpaceTransform,
+    WordSpaceTransformKeyword,
 };
 
 /// A computed value for the `text-fit` property.
@@ -112,6 +113,11 @@ pub type TextIndent = GenericTextIndent<LengthPercentage>;
 
 /// A computed value for the `hyphenate-character` property.
 pub type HyphenateLimitChars = GenericHyphenateLimitChars<CSSInteger>;
+
+/// A computed value for the `hyphenate-limit-lines` property.
+pub type HyphenateLimitLines = crate::values::generics::text::GenericHyphenateLimitLines<
+    crate::values::generics::NonNegative<CSSInteger>,
+>;
 
 impl HyphenateLimitChars {
     /// Return the `auto` value, which has all three component values as `auto`.

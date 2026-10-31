@@ -490,7 +490,7 @@ impl Polygon {
     fn parse_function_arguments(
         context: &ParserContext,
         input: &mut Parser,
-        shape_type: ShapeType,
+        _: ShapeType,
     ) -> Result<Self, ParseError> {
         let fill = input.try_parse(FillRule::parse).ok();
         let round = input
@@ -512,17 +512,9 @@ impl Polygon {
                 ))
             })?
             .into();
-        let fill = match shape_type {
-            ShapeType::Filled => fill.unwrap_or_default(),
-            ShapeType::Outline => Default::default(),
-        };
-        let round = match shape_type {
-            ShapeType::Outline => round.filter(|round| !crate::Zero::is_zero(round)),
-            ShapeType::Filled => round,
-        };
         Ok(Polygon {
-            fill,
-            round,
+            fill: fill.unwrap_or_default(),
+            round: round.filter(|round| !crate::Zero::is_zero(round)),
             coordinates,
         })
     }
@@ -706,9 +698,9 @@ impl generic::Shape<Angle, AxisPosition, Position, LengthPercentage> {
     fn parse_function_arguments(
         context: &ParserContext,
         input: &mut Parser,
-        shape_type: ShapeType,
+        _: ShapeType,
     ) -> Result<Self, ParseError> {
-        let fill = parse_fill_rule(input, shape_type, false /* no following comma */);
+        let fill = input.try_parse(FillRule::parse).unwrap_or_default();
 
         let mut first = true;
         let commands = input.parse_comma_separated(|i| {

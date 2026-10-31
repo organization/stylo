@@ -359,8 +359,38 @@ impl FontWeightRange {
 ///
 /// https://drafts.csswg.org/css-fonts-4/#descdef-font-face-font-width
 #[derive(Clone, Debug, MallocSizeOf, PartialEq, ToShmem)]
-pub struct FontWidthRange(pub SpecifiedFontWidth, pub SpecifiedFontWidth);
-impl_range!(FontWidthRange, SpecifiedFontWidth);
+pub enum FontWidthRange {
+    /// `auto`, which leaves the range to the font.
+    Auto,
+    /// A single width or a range of widths.
+    Range(SpecifiedFontWidthRange),
+}
+
+/// A width or a range of widths in the font-width descriptor.
+#[derive(Clone, Debug, MallocSizeOf, PartialEq, ToShmem)]
+pub struct SpecifiedFontWidthRange(pub SpecifiedFontWidth, pub SpecifiedFontWidth);
+impl_range!(SpecifiedFontWidthRange, SpecifiedFontWidth);
+
+impl Parse for FontWidthRange {
+    fn parse(context: &ParserContext, input: &mut Parser) -> Result<Self, ParseError> {
+        if input.try_parse(|i| i.expect_ident_matching("auto")).is_ok() {
+            return Ok(Self::Auto);
+        }
+        Ok(Self::Range(SpecifiedFontWidthRange::parse(context, input)?))
+    }
+}
+
+impl ToCss for FontWidthRange {
+    fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
+    where
+        W: fmt::Write,
+    {
+        match self {
+            Self::Auto => dest.write_str("auto"),
+            Self::Range(range) => range.to_css(dest),
+        }
+    }
+}
 
 /// The computed representation of the above, so that Gecko and Servo can read them
 /// easily.
@@ -370,8 +400,8 @@ impl_range!(FontWidthRange, SpecifiedFontWidth);
 pub struct ComputedFontWidthRange(pub FontWidth, pub FontWidth);
 
 impl FontWidthRange {
-    /// Returns a computed font-width range, or None if any value contains a calc
-    /// expression that cannot be resolved at parse time.
+    /// Returns a computed font-width range, or None for `auto` or if any value
+    /// contains a calc expression that cannot be resolved at parse time.
     pub fn compute(&self) -> Option<ComputedFontWidthRange> {
         fn compute_width(s: &SpecifiedFontWidth) -> Option<FontWidth> {
             match *s {
@@ -383,7 +413,10 @@ impl FontWidthRange {
             }
         }
 
-        let (min, max) = sort_range(compute_width(&self.0)?, compute_width(&self.1)?);
+        let Self::Range(range) = self else {
+            return None;
+        };
+        let (min, max) = sort_range(compute_width(&range.0)?, compute_width(&range.1)?);
         Some(ComputedFontWidthRange(min, max))
     }
 }

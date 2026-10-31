@@ -2709,7 +2709,10 @@ pub mod outline {
             return Err(ParseError::custom(StyleParseErrorKind::UnspecifiedError));
         }
         Ok(expanded! {
-            outline_color: unwrap_or_initial!(outline_color, color),
+            outline_color: unwrap_or_initial!(
+                outline_color,
+                color.map(crate::values::generics::color::ColorOrAuto::Color)
+            ),
             outline_style: unwrap_or_initial!(outline_style, style),
             outline_width: unwrap_or_initial!(outline_width, width),
         })
@@ -2888,6 +2891,9 @@ pub mod background {
             {
                 clip = Some(background_clip::single_value::SpecifiedValue::from(origin));
             }
+            if origin.is_none() && matches!(clip, Some(Clip::BorderArea | Clip::BorderAreaText)) {
+                origin = Some(Origin::BorderBox);
+            }
             if let Some(position) = position {
                 background_position_x.push(position.horizontal);
                 background_position_y.push(position.vertical);
@@ -3023,7 +3029,11 @@ pub mod background {
                     writer.item(attachment)?;
                 }
 
-                if *origin != Origin::PaddingBox || *clip != Clip::BorderBox {
+                if matches!(*clip, Clip::BorderArea | Clip::BorderAreaText)
+                    && *origin == Origin::BorderBox
+                {
+                    writer.item(clip)?;
+                } else if *origin != Origin::PaddingBox || *clip != Clip::BorderBox {
                     writer.item(origin)?;
                     if *clip != From::from(*origin) {
                         writer.item(clip)?;
@@ -4276,7 +4286,8 @@ pub mod mask {
                 let has_clip = *clip != Clip::BorderBox;
 
                 if !has_other && !has_position && !has_origin && !has_clip {
-                    return image.to_css(dest);
+                    image.to_css(dest)?;
+                    continue;
                 }
 
                 let mut writer = SequenceWriter::new(dest, " ");

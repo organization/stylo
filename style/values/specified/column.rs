@@ -182,6 +182,7 @@ pub enum RuleOverlap {
 pub enum ColumnFill {
     Balance,
     Auto,
+    BalanceAll,
 }
 
 /// https://drafts.csswg.org/css-multicol/#propdef-column-span
@@ -209,4 +210,5 @@ pub enum ColumnFill {
 pub enum ColumnSpan {
     None,
     All,
+    Auto,
 }
