@@ -654,12 +654,14 @@ pub enum PositionAnchorKeyword {
     Auto,
     /// `<dashed-ident>`
     Ident(DashedIdent),
+    /// `match-parent`
+    MatchParent,
 }
 
 impl IsTreeScoped for PositionAnchorKeyword {
     fn is_tree_scoped(&self) -> bool {
         match *self {
-            Self::Normal | Self::None | Self::Auto => false,
+            Self::Normal | Self::None | Self::Auto | Self::MatchParent => false,
             Self::Ident(_) => true,
         }
     }
