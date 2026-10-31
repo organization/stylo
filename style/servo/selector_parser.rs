@@ -1022,6 +1022,7 @@ impl<'a, 'i> ::selectors::Parser<'i> for SelectorParser<'a> {
             "has-slotted" => NonTSPseudoClass::HasSlotted,
             "heading" => NonTSPseudoClass::Heading(HeadingSelectorData(Default::default())),
             "hover" => NonTSPseudoClass::Hover,
+            "in-range" => NonTSPseudoClass::InRange,
             "indeterminate" => NonTSPseudoClass::Indeterminate,
             "invalid" => NonTSPseudoClass::Invalid,
             "link" => NonTSPseudoClass::Link,
