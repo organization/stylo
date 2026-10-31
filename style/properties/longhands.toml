@@ -224,6 +224,7 @@ struct = "ui"
 vector = { need_index = true }
 animation_type = "none"
 extra_prefixes = ["moz:layout.css.prefixes.animations", "webkit"]
+rule_types_allowed = ["style", "scope"]
 spec = "https://drafts.csswg.org/css-animations-2/#animation-duration"
 affects = ""
 
