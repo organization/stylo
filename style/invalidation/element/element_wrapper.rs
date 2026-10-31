@@ -339,6 +339,11 @@ where
         Some(Self::new(child, self.snapshots))
     }
 
+    fn shadow_root_first_element_child(&self) -> Option<Self> {
+        let child = self.element.shadow_root_first_element_child()?;
+        Some(Self::new(child, self.snapshots))
+    }
+
     #[inline]
     fn is_html_element_in_html_document(&self) -> bool {
         self.element.is_html_element_in_html_document()

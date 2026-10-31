@@ -504,6 +504,7 @@ fn matches_relative_selector<E: Element>(
     element: E,
     context: &mut MatchingContext<E::Impl>,
     rightmost: SubjectOrPseudoElement,
+    featureless: bool,
 ) -> bool {
     // Overall, we want to mark the path that we've traversed so that when an element
     // is invalidated, we early-reject unnecessary relative selector invalidations.
@@ -513,7 +514,12 @@ fn matches_relative_selector<E: Element>(
                 ElementSelectorFlags::RELATIVE_SELECTOR_SEARCH_DIRECTION_ANCESTOR,
             );
         }
-        let mut next_element = element.first_element_child();
+        // A featureless shadow host matches :has() against its shadow tree.
+        let mut next_element = if featureless {
+            element.shadow_root_first_element_child()
+        } else {
+            element.first_element_child()
+        };
         while let Some(el) = next_element {
             if context.needs_selector_flags() {
                 el.apply_selector_flags(
@@ -536,7 +542,7 @@ fn matches_relative_selector<E: Element>(
             }
             next_element = el.next_sibling_element();
         }
-    } else {
+    } else if !featureless {
         debug_assert!(
             matches!(
                 relative_selector.match_hint,
@@ -639,9 +645,12 @@ fn match_relative_selectors<E: Element>(
             KleeneValue::from(!context.in_negation())
         };
     }
+    let featureless = context.featureless();
     context
         .nest_for_relative_selector(element.opaque(), |context| {
-            do_match_relative_selectors(selectors, element, context, rightmost)
+            context.with_featureless(false, |context| {
+                do_match_relative_selectors(selectors, element, context, rightmost, featureless)
+            })
         })
         .into()
 }
@@ -652,6 +661,7 @@ fn do_match_relative_selectors<E: Element>(
     element: E,
     context: &mut MatchingContext<E::Impl>,
     rightmost: SubjectOrPseudoElement,
+    featureless: bool,
 ) -> bool {
     // Due to style sharing implications (See style sharing code), we mark the current styling context
     // to mark elements considered for :has matching. Additionally, we want to mark the elements themselves,
@@ -668,6 +678,14 @@ fn do_match_relative_selectors<E: Element>(
     }
 
     for relative_selector in selectors.iter() {
+        // The cache and the filter are keyed by the element and describe its children, not the
+        // shadow tree that a featureless shadow host matches against.
+        if featureless {
+            if matches_relative_selector(relative_selector, element, context, rightmost, true) {
+                return true;
+            }
+            continue;
+        }
         if let Some(result) = relative_selector_match_early(relative_selector, element, context) {
             if result {
                 return true;
@@ -676,7 +694,8 @@ fn do_match_relative_selectors<E: Element>(
             continue;
         }
 
-        let matched = matches_relative_selector(relative_selector, element, context, rightmost);
+        let matched =
+            matches_relative_selector(relative_selector, element, context, rightmost, false);
         context.selector_caches.relative_selector.add(
             element.opaque(),
             relative_selector,
@@ -1128,13 +1147,19 @@ pub(crate) fn compound_matches_featureless_host<Impl: SelectorImpl>(
     scope_matches_featureless_host: bool,
 ) -> MatchesFeaturelessHost {
     let mut matches = MatchesFeaturelessHost::Only;
+    let mut only_has = None;
     for component in iter {
+        only_has = Some(only_has.unwrap_or(true) && matches!(component, Component::Has(..)));
         match component {
             Component::Scope | Component::ImplicitScope if scope_matches_featureless_host => {},
             // :host only matches featureless elements.
             Component::Host(..) => {},
             // Pseudo-elements are allowed to match as well.
             Component::PseudoElement(..) => {},
+            // :has() looks at the shadow tree, but another selector has to match the host.
+            Component::Has(..) => {},
+            // The anchor of a :has() argument is the host itself.
+            Component::RelativeSelectorAnchor => {},
             // We allow logical pseudo-classes, but we'll fail matching of the inner selectors if
             // necessary.
             Component::Is(l) | Component::Where(l) => {
@@ -1177,6 +1202,9 @@ pub(crate) fn compound_matches_featureless_host<Impl: SelectorImpl>(
             // Other components don't match the host scope.
             _ => return MatchesFeaturelessHost::Never,
         }
+    }
+    if only_has == Some(true) {
+        return MatchesFeaturelessHost::Never;
     }
     matches
 }

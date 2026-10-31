@@ -80,6 +80,12 @@ pub trait Element: Sized + Copy + Clone + Debug {
     /// Skips non-element nodes
     fn first_element_child(&self) -> Option<Self>;
 
+    /// The first element child of this element's shadow root, if it is a shadow host. `:has()`
+    /// on a featureless shadow host looks at the shadow tree instead of the children.
+    fn shadow_root_first_element_child(&self) -> Option<Self> {
+        None
+    }
+
     fn is_html_element_in_html_document(&self) -> bool;
 
     fn has_local_name(&self, local_name: &<Self::Impl as SelectorImpl>::BorrowedLocalName) -> bool;
