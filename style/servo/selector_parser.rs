@@ -93,6 +93,7 @@ pub enum PseudoElement {
     ScrollMarkerGroup,
     ScrollButton(ScrollButtonDirection),
     Column,
+    PermissionIcon,
 
     // A `::-webkit-*` pseudo-element that is not known, which is valid but never matches.
     UnknownWebkit(UnknownWebkitName),
@@ -178,7 +179,7 @@ impl ScrollButtonDirection {
 }
 
 /// The count of all pseudo-elements.
-pub const PSEUDO_COUNT: usize = 40;
+pub const PSEUDO_COUNT: usize = 41;
 
 /// The name of a `::highlight()` pseudo-element, interned so that
 /// [`PseudoElement`] stays `Copy`.
@@ -305,6 +306,7 @@ impl ToCss for PseudoElement {
             Backdrop => "::backdrop",
             DetailsContent => "::details-content",
             InterestButton => "::interest-button",
+            PermissionIcon => "::permission-icon",
             Marker => "::marker",
             ColorSwatch => "::color-swatch",
             FileSelectorButton => "::file-selector-button",
@@ -491,6 +493,7 @@ impl PseudoElement {
             UnknownWebkit(..) => 37,
             Highlight(..) => 38,
             InterestButton => 39,
+            PermissionIcon => 40,
         }
     }
 
@@ -643,6 +646,7 @@ impl PseudoElement {
             | PseudoElement::ScrollMarkerGroup
             | PseudoElement::ScrollButton(..)
             | PseudoElement::Column
+            | PseudoElement::PermissionIcon
             | PseudoElement::UnknownWebkit(..)
             | PseudoElement::Highlight(..) => PseudoElementCascadeType::Lazy,
             PseudoElement::ServoAnonymousBox
@@ -1220,6 +1224,7 @@ impl<'a, 'i> ::selectors::Parser<'i> for SelectorParser<'a> {
             "first-line" if crate::pref!("layout.css.first-line.enabled") => FirstLine,
             "marker" => Marker,
             "details-content" => DetailsContent,
+            "permission-icon" => PermissionIcon,
             "interest-button" if crate::pref!("layout.css.interest-invokers.enabled") => InterestButton,
             "color-swatch" => ColorSwatch,
             "placeholder" => Placeholder,
