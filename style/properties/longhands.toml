@@ -371,7 +371,7 @@ servo_restyle_damage = "repaint"
 affects = "paint"
 
 [background-position-x]
-type = "position::HorizontalPosition"
+type = "position::BackgroundPositionX"
 initial = "computed::LengthPercentage::zero_percent()"
 struct = "background"
 initial_specified_value = "SpecifiedValue::initial_specified_value()"
@@ -382,7 +382,7 @@ servo_restyle_damage = "repaint"
 affects = "paint"
 
 [background-position-y]
-type = "position::VerticalPosition"
+type = "position::BackgroundPositionY"
 initial = "computed::LengthPercentage::zero_percent()"
 struct = "background"
 initial_specified_value = "SpecifiedValue::initial_specified_value()"

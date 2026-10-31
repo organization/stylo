@@ -2759,8 +2759,8 @@ pub mod background_position {
 
         input.parse_comma_separated(|input| {
             let value = Position::parse_three_value_quirky(context, input, AllowQuirks::Yes)?;
-            position_x.push(value.horizontal);
-            position_y.push(value.vertical);
+            position_x.push(value.horizontal.convert());
+            position_y.push(value.vertical.convert());
             any = true;
             Ok(())
         })?;
@@ -2783,12 +2783,23 @@ pub mod background_position {
             if len == 0 || len != self.background_position_y.0.len() {
                 return Ok(());
             }
-            for i in 0..len {
-                Position {
-                    horizontal: self.background_position_x.0[i].clone(),
-                    vertical: self.background_position_y.0[i].clone(),
-                }
-                .to_css(dest)?;
+            let Some(positions) = self
+                .background_position_x
+                .0
+                .iter()
+                .zip(self.background_position_y.0.iter())
+                .map(|(x, y)| {
+                    Some(Position {
+                        horizontal: x.physical()?,
+                        vertical: y.physical()?,
+                    })
+                })
+                .collect::<Option<Vec<_>>>()
+            else {
+                return Ok(());
+            };
+            for (i, position) in positions.iter().enumerate() {
+                position.to_css(dest)?;
 
                 if i < len - 1 {
                     dest.write_str(", ")?;
@@ -2895,8 +2906,8 @@ pub mod background {
                 origin = Some(Origin::BorderBox);
             }
             if let Some(position) = position {
-                background_position_x.push(position.horizontal);
-                background_position_y.push(position.vertical);
+                background_position_x.push(position.horizontal.convert());
+                background_position_y.push(position.vertical.convert());
             } else {
                 background_position_x.push(PositionComponent::zero());
                 background_position_y.push(PositionComponent::zero());
@@ -2984,11 +2995,20 @@ pub mod background {
             if len != self.background_attachment.0.len() {
                 return Ok(());
             }
+            let Some(positions) = self
+                .background_position_x
+                .0
+                .iter()
+                .zip(self.background_position_y.0.iter())
+                .map(|(x, y)| Some((x.physical()?, y.physical()?)))
+                .collect::<Option<Vec<_>>>()
+            else {
+                return Ok(());
+            };
 
             for i in 0..len {
                 let image = &self.background_image.0[i];
-                let position_x = &self.background_position_x.0[i];
-                let position_y = &self.background_position_y.0[i];
+                let (ref position_x, ref position_y) = positions[i];
                 let repeat = &self.background_repeat.0[i];
                 let size = &self.background_size.0[i];
                 let attachment = &self.background_attachment.0[i];
