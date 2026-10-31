@@ -126,6 +126,9 @@ bitflags! {
         const STYLE = 1 << 7;
         /// The feature requires a scroll-state container.
         const CONTAINER_REQUIRES_SCROLL_STATE = 1 << 8;
+        /// The query has a `<general-enclosed>` term that substitution can't
+        /// turn into a known feature.
+        const UNKNOWN = 1 << 9;
     }
 }
 

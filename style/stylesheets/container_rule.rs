@@ -332,6 +332,11 @@ impl ContainerCondition {
     where
         E: TElement,
     {
+        // A query with an unknown feature selects no container, so it never
+        // matches.
+        if self.flags.contains(FeatureFlags::UNKNOWN) {
+            return KleeneValue::False;
+        }
         let result = self.find_container(element, originating_element_style);
         let condition = match self.condition {
             Some(ref c) => c,

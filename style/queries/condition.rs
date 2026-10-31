@@ -1063,8 +1063,19 @@ impl OperationParser for QueryCondition {
             _ => return Err(ParseError::unexpected_token()),
         }
         input.parse_nested_block(consume_any_value)?;
+        let text = input.slice_from(start);
+        if feature_type == FeatureType::Container
+            && !custom_properties::SpecifiedValue::parse(
+                &mut Parser::new(text),
+                None,
+                &context.url_data,
+            )
+            .is_ok_and(|value| value.has_references())
+        {
+            flags.insert(FeatureFlags::UNKNOWN);
+        }
         Ok(Self::GeneralEnclosed(
-            input.slice_from(start).to_owned(),
+            text.to_owned(),
             context.url_data.clone(),
             flags,
         ))
