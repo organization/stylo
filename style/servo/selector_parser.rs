@@ -48,6 +48,7 @@ pub enum PseudoElement {
     // Non-eager pseudos.
     Backdrop,
     DetailsContent,
+    InterestButton,
     Marker,
 
     // Implemented pseudos. These pseudo elements are representing the
@@ -177,7 +178,7 @@ impl ScrollButtonDirection {
 }
 
 /// The count of all pseudo-elements.
-pub const PSEUDO_COUNT: usize = 39;
+pub const PSEUDO_COUNT: usize = 40;
 
 /// The name of a `::highlight()` pseudo-element, interned so that
 /// [`PseudoElement`] stays `Copy`.
@@ -303,6 +304,7 @@ impl ToCss for PseudoElement {
             FirstLine => "::first-line",
             Backdrop => "::backdrop",
             DetailsContent => "::details-content",
+            InterestButton => "::interest-button",
             Marker => "::marker",
             ColorSwatch => "::color-swatch",
             FileSelectorButton => "::file-selector-button",
@@ -488,6 +490,7 @@ impl PseudoElement {
             Column => 36,
             UnknownWebkit(..) => 37,
             Highlight(..) => 38,
+            InterestButton => 39,
         }
     }
 
@@ -614,6 +617,7 @@ impl PseudoElement {
             PseudoElement::Backdrop
             | PseudoElement::ColorSwatch
             | PseudoElement::FileSelectorButton
+            | PseudoElement::InterestButton
             | PseudoElement::Marker
             | PseudoElement::Placeholder
             | PseudoElement::DetailsContent
@@ -1216,6 +1220,7 @@ impl<'a, 'i> ::selectors::Parser<'i> for SelectorParser<'a> {
             "first-line" if crate::pref!("layout.css.first-line.enabled") => FirstLine,
             "marker" => Marker,
             "details-content" => DetailsContent,
+            "interest-button" if crate::pref!("layout.css.interest-invokers.enabled") => InterestButton,
             "color-swatch" => ColorSwatch,
             "placeholder" => Placeholder,
             "-servo-text-control-inner-container" => {
