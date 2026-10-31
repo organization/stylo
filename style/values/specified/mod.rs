@@ -18,7 +18,7 @@ use crate::derives::*;
 use crate::parser::{Parse, ParserContext};
 use crate::typed_om::NumericBaseType;
 use crate::values::computed;
-use crate::values::specified::calc::PercentageContext;
+use crate::values::specified::calc::{CalcNode, PercentageContext};
 use crate::values::specified::number::parse_number_with_clamping_mode;
 use crate::{Namespace, Prefix};
 use cssparser::{Parser, Token};
@@ -201,6 +201,8 @@ pub mod url;
 pub enum AngleOrPercentage {
     Percentage(Percentage),
     Angle(Angle),
+    /// A math function that mixes angles and percentages.
+    Calc(Box<CalcNumeric>),
 }
 
 impl AngleOrPercentage {
@@ -213,7 +215,18 @@ impl AngleOrPercentage {
             return Ok(AngleOrPercentage::Percentage(per));
         }
 
-        Angle::parse_internal(context, input, allow_unitless_zero).map(AngleOrPercentage::Angle)
+        if let Ok(angle) =
+            input.try_parse(|i| Angle::parse_internal(context, i, allow_unitless_zero))
+        {
+            return Ok(AngleOrPercentage::Angle(angle));
+        }
+
+        let function = match *input.next()? {
+            Token::Function(ref name) => CalcNode::math_function(context, name)?,
+            _ => return Err(ParseError::unexpected_token()),
+        };
+        CalcNode::parse_angle_or_percentage(context, input, function)
+            .map(|calc| AngleOrPercentage::Calc(Box::new(calc)))
     }
 
     /// Allow unitless angles, used for conic-gradients as specified by the spec.
