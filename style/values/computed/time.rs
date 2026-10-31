@@ -8,6 +8,7 @@ use crate::Zero;
 use crate::derives::*;
 use crate::typed_om::{NumericType, NumericValue, ToTyped, TypedValue, UnitValue};
 use crate::values::CSSFloat;
+use crate::values::generics::ClampToNonNegative;
 use std::fmt::{self, Write};
 use std::ops::AddAssign;
 use style_traits::{CssString, CssWriter, ToCss};
@@ -17,6 +18,7 @@ use thin_vec::ThinVec;
 #[derive(
     Animate,
     Clone,
+    ComputeSquaredDistance,
     Copy,
     Debug,
     Deserialize,
@@ -24,6 +26,7 @@ use thin_vec::ThinVec;
     PartialEq,
     PartialOrd,
     Serialize,
+    ToAnimatedValue,
     ToAnimatedZero,
     ToResolvedValue,
 )]
@@ -63,6 +66,12 @@ impl ToTyped for Time {
             unit: CssString::from("s"),
         })));
         Ok(())
+    }
+}
+
+impl ClampToNonNegative for Time {
+    fn clamp_to_non_negative(self) -> Self {
+        Self::from_seconds(self.seconds.max(0.))
     }
 }
 

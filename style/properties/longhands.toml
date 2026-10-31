@@ -2101,6 +2101,26 @@ spec = "Nonstandard (https://html.spec.whatwg.org/multipage/#inert-subtrees)"
 servo_restyle_damage = "repaint"
 affects = "paint"
 
+[interest-delay-start]
+type = "InterestDelay"
+initial = "computed::InterestDelay::normal()"
+initial_specified_value = "specified::InterestDelay::normal()"
+struct = "inherited_ui"
+engine = "servo"
+servo_pref = "layout.css.interest-invokers.enabled"
+spec = "https://open-ui.org/components/interest-invokers.explainer/#the-interest-delay-css-properties"
+affects = ""
+
+[interest-delay-end]
+type = "InterestDelay"
+initial = "computed::InterestDelay::normal()"
+initial_specified_value = "specified::InterestDelay::normal()"
+struct = "inherited_ui"
+engine = "servo"
+servo_pref = "layout.css.interest-invokers.enabled"
+spec = "https://open-ui.org/components/interest-invokers.explainer/#the-interest-delay-css-properties"
+affects = ""
+
 [interactivity]
 type = "Interactivity"
 initial = "specified::Interactivity::Auto"
