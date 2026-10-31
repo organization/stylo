@@ -1621,7 +1621,7 @@ pub enum ContentVisibility {
 )]
 #[css(bitflags(
     single = "normal",
-    mixed = "size,inline-size,scroll-state",
+    mixed = "size,inline-size,scroll-state,anchored",
     validate_mixed = "Self::validate_mixed_flags",
 ))]
 #[repr(C)]
@@ -1642,6 +1642,8 @@ bitflags! {
         const SIZE = 1 << 1;
         /// The `scroll-state` variant.
         const SCROLL_STATE = 1 << 2;
+        /// The `anchored` variant.
+        const ANCHORED = 1 << 3;
     }
 }
 
@@ -1652,6 +1654,11 @@ impl ContainerType {
             return false;
         }
         if self.contains(Self::SCROLL_STATE) && !crate::pref!("layout.css.scroll-state.enabled") {
+            return false;
+        }
+        if self.contains(Self::ANCHORED)
+            && !crate::pref!("layout.css.anchor-positioning.enabled", gecko = true)
+        {
             return false;
         }
         true

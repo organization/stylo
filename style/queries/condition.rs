@@ -721,6 +721,65 @@ impl ScrollStateQuery {
     }
 }
 
+/// The argument of an `anchored()` container query.
+///
+/// https://drafts.csswg.org/css-anchor-position-2/#anchored-container-queries
+#[derive(Clone, Debug, MallocSizeOf, PartialEq, ToShmem)]
+pub enum AnchoredQuery {
+    /// A single feature that is not wrapped in parentheses.
+    Feature(QueryFeatureExpression),
+    /// A condition made of features in parentheses.
+    Condition(QueryCondition),
+}
+
+impl ToCss for AnchoredQuery {
+    fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
+    where
+        W: fmt::Write,
+    {
+        match *self {
+            Self::Feature(ref f) => f.to_css_without_parens(dest),
+            Self::Condition(ref c) => c.to_css(dest),
+        }
+    }
+}
+
+impl AnchoredQuery {
+    fn enabled(feature_type: FeatureType) -> bool {
+        crate::pref!("layout.css.anchor-positioning.enabled", gecko = true)
+            && feature_type == FeatureType::Container
+    }
+
+    fn parse(context: &ParserContext, input: &mut Parser) -> Result<Self, ParseError> {
+        if let Ok(feature) = input.try_parse(|input| {
+            QueryFeatureExpression::parse_in_parenthesis_block(
+                context,
+                input,
+                FeatureType::Anchored,
+            )
+        }) {
+            return Ok(Self::Feature(feature));
+        }
+        Ok(Self::Condition(QueryCondition::parse(
+            context,
+            input,
+            FeatureType::Anchored,
+        )?))
+    }
+
+    fn matches(
+        &self,
+        context: &computed::Context,
+        custom: &mut CustomMediaEvaluator,
+        attribute_tracker: &mut AttributeTracker,
+    ) -> KleeneValue {
+        match *self {
+            Self::Feature(ref f) => f.matches(context),
+            Self::Condition(ref c) => c.matches(context, custom, attribute_tracker),
+        }
+    }
+}
+
 /// Represents a condition.
 #[derive(Clone, Debug, MallocSizeOf, PartialEq, ToShmem)]
 pub enum QueryCondition {
@@ -738,6 +797,8 @@ pub enum QueryCondition {
     Style(StyleQuery),
     /// A scroll-state() query.
     ScrollState(Box<ScrollStateQuery>),
+    /// An anchored() query.
+    Anchored(Box<AnchoredQuery>),
     /// A -moz-pref() query.
     MozPref(MozPrefFeature),
     /// [ <function-token> <any-value>? ) ] | [ ( <any-value>? ) ]
@@ -774,6 +835,11 @@ impl ToCss for QueryCondition {
             },
             Self::ScrollState(ref c) => {
                 dest.write_str("scroll-state(")?;
+                c.to_css(dest)?;
+                dest.write_char(')')
+            },
+            Self::Anchored(ref c) => {
+                dest.write_str("anchored(")?;
                 c.to_css(dest)?;
                 dest.write_char(')')
             },
@@ -824,6 +890,7 @@ impl QueryCondition {
             | Self::GeneralEnclosed(..)
             | Self::Style(..)
             | Self::ScrollState(..)
+            | Self::Anchored(..)
             | Self::MozPref(..) => {},
             Self::Not(ref cond) => cond.visit(visitor),
             Self::Operation(ref conds, _op) => {
@@ -842,6 +909,7 @@ impl QueryCondition {
         self.visit(&mut |condition| match condition {
             Self::Style(..) => result.insert(FeatureFlags::STYLE),
             Self::ScrollState(..) => result.insert(FeatureFlags::CONTAINER_REQUIRES_SCROLL_STATE),
+            Self::Anchored(..) => result.insert(FeatureFlags::CONTAINER_REQUIRES_ANCHORED),
             Self::Feature(f) => result.insert(f.feature_flags()),
             Self::GeneralEnclosed(_, _, flags) => result.insert(*flags),
             _ => {},
@@ -905,6 +973,7 @@ impl QueryCondition {
             Self::Not(ref c) => !c.matches(context, custom, attribute_tracker),
             Self::Style(ref c) => c.matches(context, attribute_tracker),
             Self::ScrollState(ref c) => c.matches(context, custom, attribute_tracker),
+            Self::Anchored(ref c) => c.matches(context, custom, attribute_tracker),
             Self::MozPref(ref c) => c.matches(context),
             Self::Operation(ref conditions, op) => {
                 debug_assert!(!conditions.is_empty(), "We never create an empty op");
@@ -1047,6 +1116,14 @@ impl OperationParser for QueryCondition {
                         });
                         if let Some(query) = query {
                             return Ok(Self::ScrollState(Box::new(query)));
+                        }
+                    },
+                    "anchored" if AnchoredQuery::enabled(feature_type) => {
+                        let query = try_parse_block(context, input, start, start_location, |input| {
+                            AnchoredQuery::parse(context, input)
+                        });
+                        if let Some(query) = query {
+                            return Ok(Self::Anchored(Box::new(query)));
                         }
                     },
                     "-moz-pref" => {

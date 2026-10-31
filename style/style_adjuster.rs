@@ -201,6 +201,37 @@ impl<'a, 'b: 'a> StyleAdjuster<'a, 'b> {
         }
     }
 
+    /// The anchor functions of a box that is not absolutely positioned compute to their fallback,
+    /// or make their declaration invalid at computed-value time.
+    /// <https://drafts.csswg.org/css-anchor-position-1/#anchor-valid>
+    #[cfg(feature = "servo")]
+    fn adjust_for_anchor_functions(&mut self) {
+        struct Unresolvable;
+        impl AnchorResolver for Unresolvable {
+            fn anchor(
+                &mut self,
+                _: &TreeScoped<DashedIdent>,
+                _: &AnchorSide,
+                _: PhysicalSide,
+            ) -> Option<Length> {
+                None
+            }
+            fn anchor_size(
+                &mut self,
+                _: &TreeScoped<DashedIdent>,
+                _: AnchorSizeKeyword,
+                _: PhysicalAxis,
+            ) -> Option<Length> {
+                None
+            }
+        }
+        if !self.style.is_absolutely_positioned()
+            && has_anchor_functions(self.style.get_position(), self.style.get_margin())
+        {
+            resolve_anchor_functions(self.style, &mut Unresolvable);
+        }
+    }
+
     /// Whether we should skip any item-based display property blockification on
     /// this element.
     fn skip_item_display_fixup<E>(&self, element: Option<E>) -> bool
@@ -352,10 +383,10 @@ impl<'a, 'b: 'a> StyleAdjuster<'a, 'b> {
                 .add_flags(ComputedValueFlags::SELF_OR_ANCESTOR_HAS_SIZE_CONTAINER_TYPE);
         }
 
-        if box_style
-            .get_container_type()
-            .intersects(crate::values::computed::ContainerType::SCROLL_STATE)
-        {
+        if box_style.get_container_type().intersects(
+            crate::values::computed::ContainerType::SCROLL_STATE
+                | crate::values::computed::ContainerType::ANCHORED,
+        ) {
             self.style
                 .add_flags(ComputedValueFlags::SELF_OR_ANCESTOR_HAS_SCROLL_STATE_CONTAINER_TYPE);
         }
@@ -1294,6 +1325,281 @@ impl<'a, 'b: 'a> StyleAdjuster<'a, 'b> {
         if !try_tactic.is_empty() {
             self.adjust_for_try_tactic(try_tactic);
         }
+        #[cfg(feature = "servo")]
+        self.adjust_for_anchor_functions();
         self.set_bits();
+    }
+}
+
+#[cfg(feature = "servo")]
+use crate::logical_geometry::PhysicalAxis;
+#[cfg(feature = "servo")]
+use crate::values::DashedIdent;
+#[cfg(feature = "servo")]
+use crate::values::computed::length_percentage::{
+    AllowAnchorPosResolutionInCalcPercentage, AnchorResolver, Unpacked,
+};
+#[cfg(feature = "servo")]
+use crate::values::computed::position::{AnchorSide, Inset};
+#[cfg(feature = "servo")]
+use crate::values::computed::{Length, LengthPercentage, Margin, MaxSize, Size};
+#[cfg(feature = "servo")]
+use crate::values::generics::NonNegative;
+#[cfg(feature = "servo")]
+use crate::values::generics::length::AnchorSizeKeyword;
+#[cfg(feature = "servo")]
+use crate::values::generics::position::TreeScoped;
+
+#[cfg(feature = "servo")]
+const SIDES: [PhysicalSide; 4] = [
+    PhysicalSide::Top,
+    PhysicalSide::Right,
+    PhysicalSide::Bottom,
+    PhysicalSide::Left,
+];
+
+#[cfg(feature = "servo")]
+fn side_axis(side: PhysicalSide) -> PhysicalAxis {
+    match side {
+        PhysicalSide::Top | PhysicalSide::Bottom => PhysicalAxis::Vertical,
+        PhysicalSide::Left | PhysicalSide::Right => PhysicalAxis::Horizontal,
+    }
+}
+
+#[cfg(feature = "servo")]
+fn is_anchor_size(value: &Size) -> bool {
+    matches!(
+        value,
+        Size::AnchorSizeFunction(_) | Size::AnchorContainingCalcFunction(_)
+    )
+}
+
+#[cfg(feature = "servo")]
+fn is_anchor_max_size(value: &MaxSize) -> bool {
+    matches!(
+        value,
+        MaxSize::AnchorSizeFunction(_) | MaxSize::AnchorContainingCalcFunction(_)
+    )
+}
+
+/// Whether the inset, margin or sizing properties of `style` use `anchor()` or `anchor-size()`.
+#[cfg(feature = "servo")]
+pub fn has_anchor_functions(
+    position: &crate::properties::style_structs::Position,
+    margin: &crate::properties::style_structs::Margin,
+) -> bool {
+    SIDES.iter().any(|&side| {
+        !matches!(
+            position.get_inset(side),
+            Inset::Auto | Inset::LengthPercentage(_)
+        ) || !matches!(
+            margin.get_margin(side),
+            Margin::Auto | Margin::LengthPercentage(_)
+        )
+    }) || is_anchor_size(&position.width)
+        || is_anchor_size(&position.height)
+        || is_anchor_size(&position.min_width)
+        || is_anchor_size(&position.min_height)
+        || is_anchor_max_size(&position.max_width)
+        || is_anchor_max_size(&position.max_height)
+}
+
+#[cfg(feature = "servo")]
+fn resolve_calc(
+    value: &LengthPercentage,
+    allowed: AllowAnchorPosResolutionInCalcPercentage,
+    resolver: &mut dyn AnchorResolver,
+) -> Option<LengthPercentage> {
+    match value.unpack() {
+        Unpacked::Calc(calc) => calc.resolve_anchor_with(allowed, resolver).ok(),
+        _ => Some(value.clone()),
+    }
+}
+
+#[cfg(feature = "servo")]
+fn resolve_inset(
+    value: &Inset,
+    side: PhysicalSide,
+    resolver: &mut dyn AnchorResolver,
+) -> Option<Inset> {
+    let (resolved, fallback) = match value {
+        Inset::Auto | Inset::LengthPercentage(_) => return Some(value.clone()),
+        Inset::AnchorContainingCalcFunction(value) => {
+            return resolve_calc(
+                value,
+                AllowAnchorPosResolutionInCalcPercentage::Both(side),
+                resolver,
+            )
+            .map(Inset::LengthPercentage);
+        },
+        Inset::AnchorFunction(function) => (
+            function
+                .side
+                .valid_for(side)
+                .then(|| resolver.anchor(&function.target_element, &function.side, side))
+                .flatten(),
+            function.fallback.as_ref(),
+        ),
+        Inset::AnchorSizeFunction(function) => (
+            resolver.anchor_size(&function.target_element, function.size, side_axis(side)),
+            function.fallback.as_ref(),
+        ),
+    };
+    match resolved {
+        Some(length) => Some(Inset::LengthPercentage(LengthPercentage::new_length(
+            length,
+        ))),
+        None => resolve_inset(fallback?, side, resolver),
+    }
+}
+
+#[cfg(feature = "servo")]
+fn resolve_margin(
+    value: &Margin,
+    axis: PhysicalAxis,
+    resolver: &mut dyn AnchorResolver,
+) -> Option<Margin> {
+    match value {
+        Margin::Auto | Margin::LengthPercentage(_) => Some(value.clone()),
+        Margin::AnchorContainingCalcFunction(value) => resolve_calc(
+            value,
+            AllowAnchorPosResolutionInCalcPercentage::AnchorSizeOnly(axis),
+            resolver,
+        )
+        .map(Margin::LengthPercentage),
+        Margin::AnchorSizeFunction(function) => {
+            match resolver.anchor_size(&function.target_element, function.size, axis) {
+                Some(length) => Some(Margin::LengthPercentage(LengthPercentage::new_length(
+                    length,
+                ))),
+                None => resolve_margin(function.fallback.as_ref()?, axis, resolver),
+            }
+        },
+    }
+}
+
+#[cfg(feature = "servo")]
+fn non_negative(length: Length) -> NonNegative<LengthPercentage> {
+    NonNegative(LengthPercentage::new_length(Length::new(
+        length.px().max(0.),
+    )))
+}
+
+#[cfg(feature = "servo")]
+fn resolve_size(
+    value: &Size,
+    axis: PhysicalAxis,
+    resolver: &mut dyn AnchorResolver,
+) -> Option<Size> {
+    match value {
+        Size::AnchorContainingCalcFunction(value) => resolve_calc(
+            &value.0,
+            AllowAnchorPosResolutionInCalcPercentage::AnchorSizeOnly(axis),
+            resolver,
+        )
+        .map(|value| Size::LengthPercentage(NonNegative(value))),
+        Size::AnchorSizeFunction(function) => {
+            match resolver.anchor_size(&function.target_element, function.size, axis) {
+                Some(length) => Some(Size::LengthPercentage(non_negative(length))),
+                None => resolve_size(function.fallback.as_ref()?, axis, resolver),
+            }
+        },
+        _ => Some(value.clone()),
+    }
+}
+
+#[cfg(feature = "servo")]
+fn resolve_max_size(
+    value: &MaxSize,
+    axis: PhysicalAxis,
+    resolver: &mut dyn AnchorResolver,
+) -> Option<MaxSize> {
+    match value {
+        MaxSize::AnchorContainingCalcFunction(value) => resolve_calc(
+            &value.0,
+            AllowAnchorPosResolutionInCalcPercentage::AnchorSizeOnly(axis),
+            resolver,
+        )
+        .map(|value| MaxSize::LengthPercentage(NonNegative(value))),
+        MaxSize::AnchorSizeFunction(function) => {
+            match resolver.anchor_size(&function.target_element, function.size, axis) {
+                Some(length) => Some(MaxSize::LengthPercentage(non_negative(length))),
+                None => resolve_max_size(function.fallback.as_ref()?, axis, resolver),
+            }
+        },
+        _ => Some(value.clone()),
+    }
+}
+
+/// Replaces the `anchor()` and `anchor-size()` functions in the inset, margin and sizing
+/// properties of `style` with the lengths `resolver` gives. A function that does not resolve uses
+/// its fallback, and without one its property behaves as `unset`.
+/// <https://drafts.csswg.org/css-anchor-position-1/#anchor-valid>
+#[cfg(feature = "servo")]
+pub fn resolve_anchor_functions(style: &mut StyleBuilder, resolver: &mut dyn AnchorResolver) {
+    for side in SIDES {
+        let inset = style.get_position().get_inset(side);
+        if !matches!(inset, Inset::Auto | Inset::LengthPercentage(_)) {
+            let inset = inset.clone();
+            let resolved = resolve_inset(&inset, side, resolver).unwrap_or(Inset::Auto);
+            style.mutate_position().set_inset(side, resolved);
+        }
+        let margin = style.get_margin().get_margin(side);
+        if !matches!(margin, Margin::Auto | Margin::LengthPercentage(_)) {
+            let margin = margin.clone();
+            let resolved = resolve_margin(&margin, side_axis(side), resolver).unwrap_or(
+                Margin::LengthPercentage(LengthPercentage::new_length(Length::new(0.))),
+            );
+            style.mutate_margin().set_margin(side, resolved);
+        }
+    }
+    let position = style.get_position();
+    let sizes = [
+        (position.width.clone(), PhysicalAxis::Horizontal),
+        (position.height.clone(), PhysicalAxis::Vertical),
+        (position.min_width.clone(), PhysicalAxis::Horizontal),
+        (position.min_height.clone(), PhysicalAxis::Vertical),
+    ]
+    .map(|(value, axis)| {
+        is_anchor_size(&value).then(|| resolve_size(&value, axis, resolver).unwrap_or(Size::Auto))
+    });
+    let position = style.get_position();
+    let max_sizes = [
+        (position.max_width.clone(), PhysicalAxis::Horizontal),
+        (position.max_height.clone(), PhysicalAxis::Vertical),
+    ]
+    .map(|(value, axis)| {
+        is_anchor_max_size(&value)
+            .then(|| resolve_max_size(&value, axis, resolver).unwrap_or(MaxSize::None))
+    });
+    let [width, height, min_width, min_height] = sizes;
+    let [max_width, max_height] = max_sizes;
+    if width.is_none()
+        && height.is_none()
+        && min_width.is_none()
+        && min_height.is_none()
+        && max_width.is_none()
+        && max_height.is_none()
+    {
+        return;
+    }
+    let position = style.mutate_position();
+    if let Some(value) = width {
+        position.set_width(value);
+    }
+    if let Some(value) = height {
+        position.set_height(value);
+    }
+    if let Some(value) = min_width {
+        position.set_min_width(value);
+    }
+    if let Some(value) = min_height {
+        position.set_min_height(value);
+    }
+    if let Some(value) = max_width {
+        position.set_max_width(value);
+    }
+    if let Some(value) = max_height {
+        position.set_max_height(value);
     }
 }

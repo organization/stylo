@@ -9,7 +9,7 @@
 use crate::computed_value_flags::ComputedValueFlags;
 use crate::dom::{AttributeTracker, TElement};
 use crate::logical_geometry::{LogicalSize, PhysicalSide, WritingMode};
-use crate::parser::ParserContext;
+use crate::parser::{Parse, ParserContext};
 use crate::properties::ComputedValues;
 use crate::queries::feature::{AllowsRanges, Evaluator, FeatureFlags, QueryFeatureDescription};
 use crate::queries::values::Orientation;
@@ -22,6 +22,7 @@ use crate::stylesheets::{CssRules, CustomMediaEvaluator};
 use crate::stylist::Stylist;
 use crate::values::computed::{CSSPixelLength, ContainerType, Context, Ratio};
 use crate::values::specified::ContainerName;
+use crate::values::specified::position::{PositionAreaPattern, PositionTryFallbacksItem};
 use crate::{LocalName, derives::*};
 use app_units::Au;
 use cssparser::{Parser, SourceLocation};
@@ -269,6 +270,14 @@ impl ContainerCondition {
             return TraversalResult::InProgress;
         }
 
+        if self
+            .flags
+            .contains(FeatureFlags::CONTAINER_REQUIRES_ANCHORED)
+            && !container_type.intersects(ContainerType::ANCHORED)
+        {
+            return TraversalResult::InProgress;
+        }
+
         // Filter by container-name.
         let container_name = box_style.get_container_name();
         for filter_name in self.name.0.iter() {
@@ -283,12 +292,16 @@ impl ContainerCondition {
         } else {
             ContainerScrollState::empty()
         };
+        let anchored = container_type
+            .intersects(ContainerType::ANCHORED)
+            .then(|| potential_container.query_anchored_fallback());
         let style = style.to_arc();
         TraversalResult::Done(ContainerLookupResult {
             element: potential_container,
             info: ContainerInfo {
                 size,
                 scroll_state,
+                anchored,
                 wm,
                 inherited_style: {
                     potential_container.traversal_parent().and_then(|parent| {
@@ -482,6 +495,7 @@ const STUCK_SHIFT: u16 = 8;
 pub struct ContainerInfo {
     size: Size2D<Option<Au>>,
     scroll_state: ContainerScrollState,
+    anchored: Option<(WritingMode, Option<PositionTryFallbacksItem>)>,
     wm: WritingMode,
     inherited_style: Option<Arc<ComputedValues>>,
 }
@@ -715,6 +729,70 @@ fn eval_snapped(context: &Context, value: Option<ScrollStateSnapped>) -> bool {
         Some(ScrollStateSnapped::Both) => x && y,
     }
 }
+
+/// The value of the `fallback` feature of an `anchored()` query.
+///
+/// https://drafts.csswg.org/css-anchor-position-2/#anchored-container-queries
+#[derive(Clone, Debug, MallocSizeOf, PartialEq, ToCss, ToShmem)]
+pub enum AnchoredFallback {
+    /// `none`: the container uses its base styles.
+    None,
+    /// A position option of `position-try-fallbacks`.
+    Item(PositionTryFallbacksItem),
+    /// A `<position-area>` with `any` in one or both axes.
+    Area(PositionAreaPattern),
+}
+
+impl Parse for AnchoredFallback {
+    fn parse(context: &ParserContext, input: &mut Parser) -> Result<Self, ParseError> {
+        if input.try_parse(|i| i.expect_ident_matching("none")).is_ok() {
+            return Ok(Self::None);
+        }
+        if let Ok(item) = input.try_parse(|input| {
+            let item = PositionTryFallbacksItem::parse(context, input)?;
+            input.expect_exhausted()?;
+            Ok::<_, ParseError>(item)
+        }) {
+            return Ok(Self::Item(item));
+        }
+        let pattern = PositionAreaPattern::parse(context, input)?;
+        if !pattern.has_any() {
+            return Err(ParseError::custom(StyleParseErrorKind::UnspecifiedError));
+        }
+        Ok(Self::Area(pattern))
+    }
+}
+
+fn eval_fallback(context: &Context, value: Option<&AnchoredFallback>) -> bool {
+    let Some(info) = context.container_info.as_ref() else {
+        return false;
+    };
+    let Some((cb_wm, ref applied)) = info.anchored else {
+        return false;
+    };
+    match (value, applied) {
+        (None, applied) => applied.is_some(),
+        (Some(AnchoredFallback::None), applied) => applied.is_none(),
+        (
+            Some(AnchoredFallback::Item(PositionTryFallbacksItem::PositionArea(queried))),
+            Some(PositionTryFallbacksItem::PositionArea(applied)),
+        ) => PositionAreaPattern::from_query(*queried).matches(*applied, cb_wm, info.wm),
+        (
+            Some(AnchoredFallback::Area(pattern)),
+            Some(PositionTryFallbacksItem::PositionArea(applied)),
+        ) => pattern.matches(*applied, cb_wm, info.wm),
+        (Some(AnchoredFallback::Area(_)), _) => false,
+        (Some(AnchoredFallback::Item(item)), applied) => applied.as_ref() == Some(item),
+    }
+}
+
+/// https://drafts.csswg.org/css-anchor-position-2/#anchored-container-queries
+pub static ANCHORED_FEATURES: [QueryFeatureDescription; 1] = [feature!(
+    atom!("fallback"),
+    AllowsRanges::No,
+    Evaluator::AnchoredFallback(eval_fallback),
+    FeatureFlags::CONTAINER_REQUIRES_ANCHORED,
+)];
 
 /// https://drafts.csswg.org/css-conditional-5/#scroll-state-container
 pub static SCROLL_STATE_FEATURES: [QueryFeatureDescription; 4] = [

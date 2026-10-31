@@ -434,6 +434,8 @@ impl SelfAlignment {
             AlignFlags::END => AlignFlags::START,
             AlignFlags::FLEX_START => AlignFlags::FLEX_END,
             AlignFlags::FLEX_END => AlignFlags::FLEX_START,
+            AlignFlags::FLOW_START => AlignFlags::FLOW_END,
+            AlignFlags::FLOW_END => AlignFlags::FLOW_START,
             AlignFlags::LEFT => AlignFlags::RIGHT,
             AlignFlags::RIGHT => AlignFlags::LEFT,
             AlignFlags::SELF_START => AlignFlags::SELF_END,

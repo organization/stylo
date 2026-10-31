@@ -42,6 +42,8 @@ pub enum FeatureType {
     Container,
     /// We're parsing a feature inside a container scroll-state() query.
     ScrollState,
+    /// We're parsing a feature inside a container anchored() query.
+    Anchored,
 }
 
 impl FeatureType {
@@ -51,12 +53,15 @@ impl FeatureType {
         #[cfg(feature = "servo")]
         use crate::servo::media_features::MEDIA_FEATURES;
 
-        use crate::stylesheets::container_rule::{CONTAINER_FEATURES, SCROLL_STATE_FEATURES};
+        use crate::stylesheets::container_rule::{
+            ANCHORED_FEATURES, CONTAINER_FEATURES, SCROLL_STATE_FEATURES,
+        };
 
         match *self {
             FeatureType::Media => &MEDIA_FEATURES,
             FeatureType::Container => &CONTAINER_FEATURES,
             FeatureType::ScrollState => &SCROLL_STATE_FEATURES,
+            FeatureType::Anchored => &ANCHORED_FEATURES,
         }
     }
 
@@ -660,6 +665,13 @@ impl QueryFeatureExpression {
                 let boolean = eval(context);
                 computed.map_or(boolean, |v| v == boolean as i32)
             },
+            Evaluator::AnchoredFallback(eval) => {
+                let value = self
+                    .kind
+                    .non_ranged_value()
+                    .map(|v| &**expect!(AnchoredFallback, v));
+                eval(context, value)
+            },
         })
     }
 }
@@ -690,6 +702,8 @@ pub enum QueryExpressionValue {
     /// An enumerated value, defined by the variant keyword table in the
     /// feature's `mData` member.
     Enumerated(KeywordDiscriminant),
+    /// The position option of an anchored() query.
+    AnchoredFallback(Box<crate::stylesheets::container_rule::AnchoredFallback>),
     /// Value types only used by style-range query expressions, not feature queries.
     /// A CSS-wide keyword.
     Keyword(CSSWideKeyword),
@@ -729,6 +743,7 @@ impl QueryExpressionValue {
             QueryExpressionValue::Time(ref v) => v.to_css(dest),
             QueryExpressionValue::Custom(ref v) => v.to_css(dest),
             QueryExpressionValue::Function(ref f) => f.to_css(dest),
+            QueryExpressionValue::AnchoredFallback(ref v) => v.to_css(dest),
             QueryExpressionValue::Enumerated(value) => match for_expr
                 .expect("caller should have passed for_expr")
                 .feature()
@@ -776,6 +791,9 @@ impl QueryExpressionValue {
             Evaluator::Enumerated { parser, .. } => {
                 QueryExpressionValue::Enumerated(parser(context, input)?)
             },
+            Evaluator::AnchoredFallback(..) => QueryExpressionValue::AnchoredFallback(Box::new(
+                crate::stylesheets::container_rule::AnchoredFallback::parse(context, input)?,
+            )),
         })
     }
 

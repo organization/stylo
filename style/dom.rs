@@ -965,6 +965,18 @@ pub trait TElement:
         Default::default()
     }
 
+    /// Returns the writing mode of an anchored container's containing block and the position
+    /// option that it applies, for anchored() container queries, or `None` for the option when it
+    /// uses its base styles.
+    fn query_anchored_fallback(
+        &self,
+    ) -> (
+        crate::logical_geometry::WritingMode,
+        Option<crate::values::specified::position::PositionTryFallbacksItem>,
+    ) {
+        (crate::logical_geometry::WritingMode::empty(), None)
+    }
+
     /// Returns true if the element has all of specified selector flags.
     fn has_selector_flags(&self, flags: ElementSelectorFlags) -> bool;
 

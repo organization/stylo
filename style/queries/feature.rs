@@ -45,6 +45,13 @@ pub enum Evaluator {
     OptionalNumberRatio(QueryFeatureGetter<Option<Ratio>>),
     /// A resolution.
     Resolution(QueryFeatureGetter<Resolution>),
+    /// The position option applied by an anchored container.
+    AnchoredFallback(
+        fn(
+            &computed::Context,
+            Option<&crate::stylesheets::container_rule::AnchoredFallback>,
+        ) -> bool,
+    ),
     /// A keyword value.
     Enumerated {
         /// The parser to get a discriminant given a string.
@@ -129,6 +136,8 @@ bitflags! {
         /// The query has a `<general-enclosed>` term that substitution can't
         /// turn into a known feature.
         const UNKNOWN = 1 << 9;
+        /// The feature requires an anchored container.
+        const CONTAINER_REQUIRES_ANCHORED = 1 << 10;
     }
 }
 
