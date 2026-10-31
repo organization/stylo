@@ -2375,12 +2375,14 @@ fn substitute_all(
 
     /// Traverse the references in `root` (the value of a custom property or of a non-custom
     /// property feeding a `NonCustom` node), creating graph edges to the referenced substitution
-    /// functions and updating `lowlink`/`self_ref` accordingly.
+    /// functions and updating `lowlink`/`self_ref` accordingly. Returns whether a cycle through
+    /// `var` was found.
     ///
     /// We follow var()/attr()/env() fallbacks only when the primary substitution function is
     /// guaranteed-invalid (i.e. when the fallback is actually used). This matches the substitution
     /// order and the resolution of https://github.com/w3c/csswg-drafts/issues/11500: cycles (or
-    /// dependencies) that only exist through an unused fallback don't count.
+    /// dependencies) that only exist through an unused fallback don't count. Once `var` is known
+    /// to be in a cycle its value is invalid, so no fallback of it is used any more either.
     ///
     /// We need to bubble up non custom references from unregistered properties.
     fn visit_value_references<'a, 'b, 'c, 'd>(
@@ -2395,28 +2397,21 @@ fn substitute_all(
         self_ref: &mut bool,
         attribute_tracker: &mut AttributeTracker,
         non_custom_references: &mut ReferenceFlags,
-    ) {
+    ) -> bool {
         // FIXME: Maybe avoid visiting the same var twice if not needed?
-        let mut refs_stack = SmallVec::<[&References; 5]>::new();
-        refs_stack.push(root);
-        while let Some(refs) = refs_stack.pop() {
-            *non_custom_references |= refs.flags;
-            for next in &refs.refs {
-                if next.substitution_kind == SubstitutionFunctionKind::Env {
-                    // env() doesn't reference custom properties, so it never participates in
-                    // cycles; its fallback is used only when the environment doesn't provide
-                    // the variable.
-                    let device = context.stylist.device();
-                    let present = device
-                        .environment()
-                        .get(&next.name, device, url_data)
-                        .is_some();
-                    if !present && let Some(ref fallback) = next.fallback {
-                        refs_stack.push(&fallback.references);
-                    }
-                    continue;
-                }
-
+        let mut in_cycle = false;
+        *non_custom_references |= root.flags;
+        for next in &root.refs {
+            let fallback_used = if next.substitution_kind == SubstitutionFunctionKind::Env {
+                // env() doesn't reference custom properties, so it never participates in
+                // cycles; its fallback is used only when the environment doesn't provide
+                // the variable.
+                let device = context.stylist.device();
+                device
+                    .environment()
+                    .get(&next.name, device, url_data)
+                    .is_none()
+            } else {
                 let kind = next.substitution_kind;
                 let name = if kind == SubstitutionFunctionKind::Attr {
                     // An type()-less attr() within attr(... type()) can still have nested
@@ -2435,11 +2430,11 @@ fn substitute_all(
                     {
                         context.map_mut().insert_attr(&next.name, val);
                     }
-                    next.name.clone()
+                    Some(next.name.clone())
                 } else if let Some(ref argument) = next.name_argument {
                     // The name argument is always substituted, so its references are
                     // dependencies, and the custom property it names is one once it resolves.
-                    visit_value_references(
+                    in_cycle |= visit_value_references(
                         var,
                         &argument.references,
                         css,
@@ -2453,7 +2448,7 @@ fn substitute_all(
                         non_custom_references,
                     );
                     let computed_context = &*context.computed_context;
-                    let (name, _) = substitute_var_name(
+                    substitute_var_name(
                         css,
                         url_data,
                         argument,
@@ -2463,65 +2458,80 @@ fn substitute_all(
                         computed_context,
                         attribute_tracker,
                         &mut SmallVec::new(),
-                    );
-                    let Some(name) = name else {
-                        if let Some(ref fallback) = next.fallback {
-                            refs_stack.push(&fallback.references);
-                        }
-                        continue;
-                    };
-                    name
+                    )
+                    .0
                 } else {
-                    next.name.clone()
-                };
-                let next_var = if kind == SubstitutionFunctionKind::Attr {
-                    VarType::Attr(name.clone())
-                } else {
-                    VarType::Custom(name.clone())
+                    Some(next.name.clone())
                 };
 
-                visit_link(
-                    next_var,
+                if let Some(name) = name {
+                    let next_var = if kind == SubstitutionFunctionKind::Attr {
+                        VarType::Attr(name.clone())
+                    } else {
+                        VarType::Custom(name.clone())
+                    };
+                    in_cycle |= visit_link(
+                        next_var,
+                        index,
+                        references_from_non_custom_properties,
+                        context,
+                        lowlink,
+                        self_ref,
+                        attribute_tracker,
+                    );
+
+                    // Now that the primary reference has been resolved, classify it to
+                    // decide whether its fallback is used.
+                    let resolved = if kind == SubstitutionFunctionKind::Var {
+                        let registration = context.stylist.get_custom_property_registration(&name);
+                        context.map().get_var(registration, &name)
+                    } else {
+                        context.map().get_attr(&name)
+                    };
+                    // The primary is guaranteed-invalid if it's absent from the map, or still
+                    // present but unresolved (i.e. part of a cycle currently being resolved).
+                    match resolved {
+                        None => true,
+                        Some(resolved) => match resolved.as_universal() {
+                            Some(v) => {
+                                *non_custom_references |= v.references.flags;
+                                v.has_references()
+                            },
+                            // Resolved and computed value, no other custom references left.
+                            None => false,
+                        },
+                    }
+                } else {
+                    // The name doesn't parse, so the fallback is used.
+                    true
+                }
+            };
+
+            if fallback_used
+                && !in_cycle
+                && let Some(ref fallback) = next.fallback
+            {
+                in_cycle = visit_value_references(
+                    var,
+                    &fallback.references,
+                    css,
+                    url_data,
                     index,
                     references_from_non_custom_properties,
                     context,
                     lowlink,
                     self_ref,
                     attribute_tracker,
+                    non_custom_references,
                 );
-
-                // Now that the primary reference has been resolved, classify it to
-                // decide whether its fallback is used.
-                let resolved = match kind {
-                    SubstitutionFunctionKind::Var => {
-                        let registration = context.stylist.get_custom_property_registration(&name);
-                        context.map().get_var(registration, &name)
-                    },
-                    SubstitutionFunctionKind::Attr => context.map().get_attr(&name),
-                    SubstitutionFunctionKind::Env => unreachable!("Handled above"),
-                };
-                // The primary is guaranteed-invalid if it's absent from the map, or still
-                // present but unresolved (i.e. part of a cycle currently being resolved).
-                let mut primary_valid = false;
-                if let Some(resolved) = resolved {
-                    if let Some(v) = resolved.as_universal() {
-                        primary_valid = !v.has_references();
-                        *non_custom_references |= v.references.flags;
-                    } else {
-                        // Resolved and computed value, no other custom references left.
-                        primary_valid = true;
-                    }
-                }
-
-                if !primary_valid && let Some(ref fallback) = next.fallback {
-                    refs_stack.push(&fallback.references);
-                }
             }
         }
+        in_cycle
     }
 
     /// Traverse a single dependency `var` of the variable at order index `index`, updating its
-    /// `lowlink`/`self_ref` from the result.
+    /// `lowlink`/`self_ref` from the result. Returns whether `var` is still on the stack, which
+    /// means that the variable at `index` is in a cycle.
     fn visit_link<'a, 'b, 'c, 'd>(
         var: VarType,
         index: usize,
@@ -2530,12 +2540,12 @@ fn substitute_all(
         lowlink: &mut usize,
         self_ref: &mut bool,
         attr_tracker: &mut AttributeTracker,
-    ) {
+    ) -> bool {
         let next_index = match traverse(var, non_custom_references, context, attr_tracker) {
             Some(index) => index,
             // There is nothing to do if the next variable has been
             // fully resolved at this point.
-            None => return,
+            None => return false,
         };
         let next_info = &context.var_info[next_index];
         if next_index > index {
@@ -2550,6 +2560,7 @@ fn substitute_all(
             // in the stack, so we are at the same component.
             *lowlink = cmp::min(*lowlink, next_index);
         }
+        next_info.var.is_some()
     }
 
     /// This function combines the traversal for cycle removal and value
