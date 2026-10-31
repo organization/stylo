@@ -125,6 +125,11 @@ pub enum HyphenateCharacter {
 /// A value for the `hyphenate-limit-chars` property.
 pub type HyphenateLimitChars = GenericHyphenateLimitChars<Integer>;
 
+/// A specified value for the `hyphenate-limit-lines` property.
+pub type HyphenateLimitLines = crate::values::generics::text::GenericHyphenateLimitLines<
+    crate::values::specified::NonNegativeInteger,
+>;
+
 impl Parse for HyphenateLimitChars {
     fn parse(context: &ParserContext, input: &mut Parser) -> Result<Self, ParseError> {
         type IntegerOrAuto = NumberOrAuto<Integer>;
@@ -1676,6 +1681,54 @@ pub enum RubyAlign {
     Start,
     Center,
     SpaceBetween,
+}
+
+/// https://drafts.csswg.org/css-ruby/#ruby-merge-property
+#[allow(missing_docs)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    MallocSizeOf,
+    Parse,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToComputedValue,
+    ToCss,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+#[repr(u8)]
+pub enum RubyMerge {
+    Separate,
+    Merge,
+    Auto,
+}
+
+/// https://drafts.csswg.org/css-ruby/#ruby-overhang-property
+#[allow(missing_docs)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    MallocSizeOf,
+    Parse,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToComputedValue,
+    ToCss,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+#[repr(u8)]
+pub enum RubyOverhang {
+    Auto,
+    #[parse(aliases = "none")]
+    Spaces,
 }
 
 /// https://drafts.csswg.org/css-writing-modes-3/#text-combine-upright
