@@ -92,6 +92,34 @@ pub enum PseudoElement {
     ScrollMarkerGroup,
     ScrollButton(ScrollButtonDirection),
     Column,
+
+    // A `::-webkit-*` pseudo-element that is not known, which is valid but never matches.
+    UnknownWebkit(UnknownWebkitName),
+}
+
+/// The lowercased name of an unknown `::-webkit-*` pseudo-element after the prefix, interned so
+/// that [`PseudoElement`] stays `Copy`.
+///
+/// <https://drafts.csswg.org/selectors-4/#compat>
+#[derive(
+    Clone, Copy, Debug, Deserialize, Eq, Hash, MallocSizeOf, PartialEq, Serialize, ToShmem,
+)]
+pub struct UnknownWebkitName(u32);
+
+static UNKNOWN_WEBKIT_NAMES: std::sync::RwLock<Vec<Atom>> = std::sync::RwLock::new(Vec::new());
+
+impl UnknownWebkitName {
+    fn intern(name: Atom) -> Self {
+        let mut names = UNKNOWN_WEBKIT_NAMES.write().unwrap();
+        let index = match names.iter().position(|existing| *existing == name) {
+            Some(index) => index,
+            None => {
+                names.push(name);
+                names.len() - 1
+            },
+        };
+        Self(index as u32)
+    }
 }
 
 /// The argument of `::scroll-button()`.
@@ -148,7 +176,7 @@ impl ScrollButtonDirection {
 }
 
 /// The count of all pseudo-elements.
-pub const PSEUDO_COUNT: usize = 37;
+pub const PSEUDO_COUNT: usize = 38;
 
 /// The argument of the view transition pseudo-elements, interned so that
 /// [`PseudoElement`] stays `Copy`.
@@ -291,6 +319,11 @@ impl ToCss for PseudoElement {
                 return dest.write_char(')');
             },
             Column => "::column",
+            UnknownWebkit(name) => {
+                dest.write_str("::-webkit-")?;
+                let names = UNKNOWN_WEBKIT_NAMES.read().unwrap();
+                return serialize_identifier(&names[name.0 as usize], dest);
+            },
         })
     }
 }
@@ -360,6 +393,7 @@ impl ::selectors::parser::PseudoElement for PseudoElement {
                     | Self::SliderThumb
                     | Self::SliderTrack
                     | Self::MozProgressBar
+                    | Self::UnknownWebkit(..)
             )
     }
 }
@@ -417,6 +451,7 @@ impl PseudoElement {
             ScrollMarkerGroup => 34,
             ScrollButton(..) => 35,
             Column => 36,
+            UnknownWebkit(..) => 37,
         }
     }
 
@@ -449,7 +484,7 @@ impl PseudoElement {
     /// Whether this is an unknown ::-webkit- pseudo-element.
     #[inline]
     pub fn is_unknown_webkit_pseudo_element(&self) -> bool {
-        false
+        matches!(*self, PseudoElement::UnknownWebkit(..))
     }
 
     /// Whether this pseudo-element is the ::marker pseudo.
@@ -567,7 +602,8 @@ impl PseudoElement {
             | PseudoElement::ScrollMarker
             | PseudoElement::ScrollMarkerGroup
             | PseudoElement::ScrollButton(..)
-            | PseudoElement::Column => PseudoElementCascadeType::Lazy,
+            | PseudoElement::Column
+            | PseudoElement::UnknownWebkit(..) => PseudoElementCascadeType::Lazy,
             PseudoElement::ServoAnonymousBox
             | PseudoElement::ServoAnonymousTable
             | PseudoElement::ServoAnonymousTableCell
@@ -709,6 +745,7 @@ pub enum NonTSPseudoClass {
     Active,
     AnyLink,
     Autofill,
+    Buffering,
     Checked,
     /// The :state` pseudo-class.
     CustomState(CustomState),
@@ -722,6 +759,7 @@ pub enum NonTSPseudoClass {
     FocusWithin,
     FocusVisible,
     Fullscreen,
+    HasSlotted,
     /// The `:heading` and `:heading()` pseudo-classes.
     Heading(HeadingSelectorData),
     Hover,
@@ -735,20 +773,26 @@ pub enum NonTSPseudoClass {
     MozMeterOptimum,
     MozMeterSubOptimum,
     MozMeterSubSubOptimum,
+    Muted,
     Open,
     Optional,
     OutOfRange,
+    Paused,
     PlaceholderShown,
+    Playing,
     PopoverOpen,
     ReadOnly,
     ReadWrite,
     Required,
+    Seeking,
     ServoNonZeroBorder,
+    Stalled,
     Target,
     UserInvalid,
     UserValid,
     Valid,
     Visited,
+    VolumeLocked,
 }
 
 impl ::selectors::parser::NonTSPseudoClass for NonTSPseudoClass {
@@ -786,6 +830,7 @@ impl ToCss for NonTSPseudoClass {
             Self::Active => ":active",
             Self::AnyLink => ":any-link",
             Self::Autofill => ":autofill",
+            Self::Buffering => ":buffering",
             Self::Checked => ":checked",
             Self::CustomState(ref state) => {
                 dest.write_str(":state(")?;
@@ -805,6 +850,7 @@ impl ToCss for NonTSPseudoClass {
             Self::FocusVisible => ":focus-visible",
             Self::FocusWithin => ":focus-within",
             Self::Fullscreen => ":fullscreen",
+            Self::HasSlotted => ":has-slotted",
             Self::Heading(ref levels) => {
                 dest.write_str(":heading")?;
                 if levels.0.is_empty() {
@@ -829,20 +875,26 @@ impl ToCss for NonTSPseudoClass {
             Self::MozMeterOptimum => ":-moz-meter-optimum",
             Self::MozMeterSubOptimum => ":-moz-meter-sub-optimum",
             Self::MozMeterSubSubOptimum => ":-moz-meter-sub-sub-optimum",
+            Self::Muted => ":muted",
             Self::Open => ":open",
             Self::Optional => ":optional",
             Self::OutOfRange => ":out-of-range",
+            Self::Paused => ":paused",
             Self::PlaceholderShown => ":placeholder-shown",
+            Self::Playing => ":playing",
             Self::PopoverOpen => ":popover-open",
             Self::ReadOnly => ":read-only",
             Self::ReadWrite => ":read-write",
             Self::Required => ":required",
+            Self::Seeking => ":seeking",
             Self::ServoNonZeroBorder => ":-servo-nonzero-border",
+            Self::Stalled => ":stalled",
             Self::Target => ":target",
             Self::UserInvalid => ":user-invalid",
             Self::UserValid => ":user-valid",
             Self::Valid => ":valid",
             Self::Visited => ":visited",
+            Self::VolumeLocked => ":volume-locked",
             Self::Lang(_) => unreachable!(),
         })
     }
@@ -856,6 +908,7 @@ impl NonTSPseudoClass {
             Self::Active => ElementState::ACTIVE,
             Self::AnyLink => ElementState::VISITED_OR_UNVISITED,
             Self::Autofill => ElementState::AUTOFILL,
+            Self::Buffering => ElementState::BUFFERING,
             Self::Checked => ElementState::CHECKED,
             Self::Default => ElementState::DEFAULT,
             Self::Defined => ElementState::DEFINED,
@@ -866,6 +919,7 @@ impl NonTSPseudoClass {
             Self::FocusVisible => ElementState::FOCUSRING,
             Self::FocusWithin => ElementState::FOCUS_WITHIN,
             Self::Fullscreen => ElementState::FULLSCREEN,
+            Self::HasSlotted => ElementState::HAS_SLOTTED,
             Self::Heading(_) => ElementState::HEADING_LEVEL_BITS,
             Self::Hover => ElementState::HOVER,
             Self::InRange => ElementState::INRANGE,
@@ -877,22 +931,27 @@ impl NonTSPseudoClass {
             Self::MozMeterOptimum => ElementState::OPTIMUM,
             Self::MozMeterSubOptimum => ElementState::SUB_OPTIMUM,
             Self::MozMeterSubSubOptimum => ElementState::SUB_SUB_OPTIMUM,
+            Self::Muted => ElementState::MUTED,
             Self::Open => ElementState::OPEN,
             Self::Optional => ElementState::OPTIONAL_,
             Self::OutOfRange => ElementState::OUTOFRANGE,
+            Self::Paused | Self::Playing => ElementState::PAUSED,
             Self::PlaceholderShown => ElementState::PLACEHOLDER_SHOWN,
             Self::PopoverOpen => ElementState::POPOVER_OPEN,
             Self::ReadOnly => ElementState::READONLY,
             Self::ReadWrite => ElementState::READWRITE,
             Self::Required => ElementState::REQUIRED,
+            Self::Seeking => ElementState::SEEKING,
+            Self::Stalled => ElementState::STALLED,
             Self::Target => ElementState::URLTARGET,
             Self::UserInvalid => ElementState::USER_INVALID,
             Self::UserValid => ElementState::USER_VALID,
             Self::Valid => ElementState::VALID,
             Self::Visited => ElementState::VISITED,
-            Self::CustomState(_) | Self::Lang(_) | Self::ServoNonZeroBorder => {
-                ElementState::empty()
-            },
+            Self::CustomState(_)
+            | Self::Lang(_)
+            | Self::ServoNonZeroBorder
+            | Self::VolumeLocked => ElementState::empty(),
         }
     }
 
@@ -962,6 +1021,21 @@ impl<'a, 'i> ::selectors::Parser<'i> for SelectorParser<'a> {
     }
 
     #[inline]
+    fn parse_class_prefix(&self) -> bool {
+        crate::pref!("layout.css.class-prefix-selector.enabled")
+    }
+
+    #[inline]
+    fn parse_has_slotted_argument(&self) -> bool {
+        crate::pref!("layout.css.has-slotted-argument.enabled")
+    }
+
+    #[inline]
+    fn parse_host_context(&self) -> bool {
+        crate::pref!("layout.css.host-context.enabled")
+    }
+
+    #[inline]
     fn parse_parent_selector(&self) -> bool {
         true
     }
@@ -981,6 +1055,7 @@ impl<'a, 'i> ::selectors::Parser<'i> for SelectorParser<'a> {
             "active" => NonTSPseudoClass::Active,
             "any-link" => NonTSPseudoClass::AnyLink,
             "autofill" => NonTSPseudoClass::Autofill,
+            "buffering" => NonTSPseudoClass::Buffering,
             "checked" => NonTSPseudoClass::Checked,
             "default" => NonTSPseudoClass::Default,
             "defined" => NonTSPseudoClass::Defined,
@@ -990,25 +1065,33 @@ impl<'a, 'i> ::selectors::Parser<'i> for SelectorParser<'a> {
             "focus-visible" => NonTSPseudoClass::FocusVisible,
             "focus-within" => NonTSPseudoClass::FocusWithin,
             "fullscreen" => NonTSPseudoClass::Fullscreen,
+            "has-slotted" => NonTSPseudoClass::HasSlotted,
             "heading" => NonTSPseudoClass::Heading(HeadingSelectorData(Default::default())),
             "hover" => NonTSPseudoClass::Hover,
+            "in-range" => NonTSPseudoClass::InRange,
             "indeterminate" => NonTSPseudoClass::Indeterminate,
             "invalid" => NonTSPseudoClass::Invalid,
             "link" => NonTSPseudoClass::Link,
             "modal" => NonTSPseudoClass::Modal,
+            "muted" => NonTSPseudoClass::Muted,
             "open" => NonTSPseudoClass::Open,
             "optional" => NonTSPseudoClass::Optional,
             "out-of-range" => NonTSPseudoClass::OutOfRange,
+            "paused" => NonTSPseudoClass::Paused,
             "placeholder-shown" => NonTSPseudoClass::PlaceholderShown,
+            "playing" => NonTSPseudoClass::Playing,
             "popover-open" => NonTSPseudoClass::PopoverOpen,
             "read-only" => NonTSPseudoClass::ReadOnly,
             "read-write" => NonTSPseudoClass::ReadWrite,
             "required" => NonTSPseudoClass::Required,
+            "seeking" => NonTSPseudoClass::Seeking,
+            "stalled" => NonTSPseudoClass::Stalled,
             "target" => NonTSPseudoClass::Target,
             "user-invalid" => NonTSPseudoClass::UserInvalid,
             "user-valid" => NonTSPseudoClass::UserValid,
             "valid" => NonTSPseudoClass::Valid,
             "visited" => NonTSPseudoClass::Visited,
+            "volume-locked" => NonTSPseudoClass::VolumeLocked,
             "-moz-inert" => {
                 if !self.in_user_agent_stylesheet() {
                     return Err(ParseError::custom(
@@ -1038,10 +1121,10 @@ impl<'a, 'i> ::selectors::Parser<'i> for SelectorParser<'a> {
         &self,
         name: &str,
         parser: &mut CssParser<'i>,
-        after_part: bool,
+        _after_part: bool,
     ) -> Result<NonTSPseudoClass, ParseError> {
         let pseudo_class = match_ignore_ascii_case! { &name,
-            "lang" if !after_part => {
+            "lang" => {
                 NonTSPseudoClass::Lang(parser.expect_ident_or_string()?.as_ref().into())
             },
             "state" => {
@@ -1135,8 +1218,16 @@ impl<'a, 'i> ::selectors::Parser<'i> for SelectorParser<'a> {
                 }
                 ServoTableWrapper
             },
-            _ => return Err(ParseError::custom(SelectorParseErrorKind::UnexpectedIdent))
-
+            _ => {
+                // @supports must report unknown `-webkit-*` pseudo-elements as unsupported.
+                if self.for_supports_rule
+                    || name.len() <= 8
+                    || !name.as_bytes()[..8].eq_ignore_ascii_case(b"-webkit-")
+                {
+                    return Err(ParseError::custom(SelectorParseErrorKind::UnexpectedIdent));
+                }
+                UnknownWebkit(UnknownWebkitName::intern(name[8..].to_ascii_lowercase().into()))
+            }
         };
 
         Ok(pseudo_element)
@@ -1394,6 +1485,10 @@ impl ServoElementSnapshot {
 /// Returns whether the language is matched, as defined by
 /// [RFC 4647](https://tools.ietf.org/html/rfc4647#section-3.3.2).
 pub fn extended_filtering(tag: &str, range: &str) -> bool {
+    // A language tag subtag has at most eight characters, so a longer one makes the tag invalid.
+    if tag.split('\x2d').any(|subtag| subtag.len() > 8) {
+        return false;
+    }
     range.split(',').any(|lang_range| {
         // step 1
         let mut range_subtags = lang_range.split('\x2d');

@@ -339,6 +339,16 @@ where
         Some(Self::new(child, self.snapshots))
     }
 
+    fn any_flattened_slotted_element<F: FnMut(Self) -> bool>(&self, mut matches: F) -> bool {
+        self.element
+            .any_flattened_slotted_element(|slotted| matches(Self::new(slotted, self.snapshots)))
+    }
+
+    fn shadow_root_first_element_child(&self) -> Option<Self> {
+        let child = self.element.shadow_root_first_element_child()?;
+        Some(Self::new(child, self.snapshots))
+    }
+
     #[inline]
     fn is_html_element_in_html_document(&self) -> bool {
         self.element.is_html_element_in_html_document()
@@ -411,6 +421,19 @@ where
         match self.snapshot() {
             Some(snapshot) if snapshot.has_attrs() => snapshot.has_class(name, case_sensitivity),
             _ => self.element.has_class(name, case_sensitivity),
+        }
+    }
+
+    fn has_class_prefix(&self, prefix: &AtomIdent, case_sensitivity: CaseSensitivity) -> bool {
+        match self.snapshot() {
+            Some(snapshot) if snapshot.has_attrs() => {
+                let mut found = false;
+                snapshot.each_class(|class| {
+                    found = found || case_sensitivity.class_has_prefix(class, prefix);
+                });
+                found
+            },
+            _ => self.element.has_class_prefix(prefix, case_sensitivity),
         }
     }
 

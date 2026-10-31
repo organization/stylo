@@ -193,4 +193,23 @@ impl CaseSensitivity {
             },
         }
     }
+
+    /// Whether `class` matches the class prefix selector with `prefix`: it starts with `prefix`
+    /// and the next character exists and is not a hyphen. Matching case-insensitively (the
+    /// quirks mode class quirk) lowercases `class` only, never the prefix.
+    ///
+    /// <https://drafts.csswg.org/selectors-5/#class-prefix>
+    pub fn class_has_prefix(self, class: &str, prefix: &str) -> bool {
+        let (class, prefix) = (class.as_bytes(), prefix.as_bytes());
+        if class.get(prefix.len()).is_none_or(|&next| next == b'-') {
+            return false;
+        }
+        match self {
+            CaseSensitivity::CaseSensitive => class.starts_with(prefix),
+            CaseSensitivity::AsciiCaseInsensitive => class
+                .iter()
+                .zip(prefix)
+                .all(|(class, prefix)| class.to_ascii_lowercase() == *prefix),
+        }
+    }
 }

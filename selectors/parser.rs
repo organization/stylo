@@ -299,6 +299,21 @@ pub trait Parser<'i> {
         false
     }
 
+    /// Whether to parse class prefix selectors such as `.foo-*`.
+    fn parse_class_prefix(&self) -> bool {
+        false
+    }
+
+    /// Whether to parse the compound selector argument of `:has-slotted()`.
+    fn parse_has_slotted_argument(&self) -> bool {
+        false
+    }
+
+    /// Whether to parse the `:host-context()` pseudo-class.
+    fn parse_host_context(&self) -> bool {
+        false
+    }
+
     /// Whether to parse the '&' delimiter as a parent selector.
     fn parse_parent_selector(&self) -> bool {
         false
@@ -1255,6 +1270,7 @@ impl<Impl: SelectorImpl> Selector<Impl> {
                 LocalName(..)
                 | ID(..)
                 | Class(..)
+                | ClassPrefix(..)
                 | AttributeInNoNamespaceExists { .. }
                 | AttributeInNoNamespace { .. }
                 | AttributeOther(..)
@@ -1331,6 +1347,13 @@ impl<Impl: SelectorImpl> Selector<Impl> {
                     &mut flags,
                     forbidden_flags,
                 ))),
+                HostContext(ref selector) => HostContext(replace_parent_on_selector(
+                    selector,
+                    parent,
+                    &mut specificity,
+                    &mut flags,
+                    forbidden_flags,
+                )),
                 NthOf(ref data) => {
                     let selectors = replace_parent_on_selector_list(
                         data.selectors(),
@@ -1348,6 +1371,13 @@ impl<Impl: SelectorImpl> Selector<Impl> {
                     })
                 },
                 Slotted(ref selector) => Slotted(replace_parent_on_selector(
+                    selector,
+                    parent,
+                    &mut specificity,
+                    &mut flags,
+                    forbidden_flags,
+                )),
+                HasSlotted(ref selector) => HasSlotted(replace_parent_on_selector(
                     selector,
                     parent,
                     &mut specificity,
@@ -2075,6 +2105,10 @@ pub enum Component<Impl: SelectorImpl> {
 
     ID(#[cfg_attr(feature = "to_shmem", shmem(field_bound))] Impl::Identifier),
     Class(#[cfg_attr(feature = "to_shmem", shmem(field_bound))] Impl::Identifier),
+    /// A class prefix selector such as `.foo-*`, holding the prefix (`foo-`).
+    ///
+    /// https://drafts.csswg.org/selectors-5/#class-prefix
+    ClassPrefix(#[cfg_attr(feature = "to_shmem", shmem(field_bound))] Impl::Identifier),
 
     AttributeInNoNamespaceExists {
         #[cfg_attr(feature = "to_shmem", shmem(field_bound))]
@@ -2131,6 +2165,11 @@ pub enum Component<Impl: SelectorImpl> {
     ///
     /// See https://github.com/w3c/csswg-drafts/issues/2158
     Slotted(Selector<Impl>),
+    /// The `:has-slotted()` pseudo-class with a compound selector argument, which matches a slot
+    /// when one of its flattened assigned elements matches the argument.
+    ///
+    /// https://github.com/w3c/csswg-drafts/pull/10586
+    HasSlotted(Selector<Impl>),
     /// The `::part` pseudo-element.
     ///   https://drafts.csswg.org/css-shadow-parts/#part
     Part(#[cfg_attr(feature = "to_shmem", shmem(field_bound))] Box<[Impl::Identifier]>),
@@ -2144,6 +2183,11 @@ pub enum Component<Impl: SelectorImpl> {
     ///
     /// See https://github.com/w3c/csswg-drafts/issues/2158
     Host(Option<Selector<Impl>>),
+    /// The `:host-context()` pseudo-class, which matches the shadow host when it or one of its
+    /// shadow-including ancestors matches the compound selector.
+    ///
+    /// https://drafts.csswg.org/css-scoping/#host-selector
+    HostContext(Selector<Impl>),
     /// The `:where` pseudo-class.
     ///
     /// https://drafts.csswg.org/selectors/#zero-matches
@@ -2187,7 +2231,7 @@ impl<Impl: SelectorImpl> Component<Impl> {
     /// Returns true if this is a :host() selector.
     #[inline]
     pub fn is_host(&self) -> bool {
-        matches!(*self, Component::Host(..))
+        matches!(*self, Component::Host(..) | Component::HostContext(..))
     }
 
     /// Returns the value as a combinator if applicable, None otherwise.
@@ -2229,12 +2273,12 @@ impl<Impl: SelectorImpl> Component<Impl> {
         }
 
         match *self {
-            Slotted(ref selector) => {
+            Slotted(ref selector) | HasSlotted(ref selector) => {
                 if !selector.visit(visitor) {
                     return false;
                 }
             },
-            Host(Some(ref selector)) => {
+            Host(Some(ref selector)) | HostContext(ref selector) => {
                 if !selector.visit(visitor) {
                     return false;
                 }
@@ -2256,6 +2300,16 @@ impl<Impl: SelectorImpl> Component<Impl> {
                     &NamespaceConstraint::Specific(&namespace_empty_string::<Impl>()),
                     local_name,
                     local_name,
+                ) {
+                    return false;
+                }
+            },
+            ClassPrefix(..) => {
+                let class = Impl::LocalName::from("class");
+                if !visitor.visit_attribute_selector(
+                    &NamespaceConstraint::Specific(&namespace_empty_string::<Impl>()),
+                    &class,
+                    &class,
                 ) {
                     return false;
                 }
@@ -2593,6 +2647,11 @@ impl<Impl: SelectorImpl> ToCss for Component<Impl> {
                 selector.to_css(dest)?;
                 dest.write_char(')')
             },
+            HasSlotted(ref selector) => {
+                dest.write_str(":has-slotted(")?;
+                selector.to_css(dest)?;
+                dest.write_char(')')
+            },
             Part(ref part_names) => {
                 dest.write_str("::part(")?;
                 for (i, name) in part_names.iter().enumerate() {
@@ -2611,6 +2670,11 @@ impl<Impl: SelectorImpl> ToCss for Component<Impl> {
             Class(ref s) => {
                 dest.write_char('.')?;
                 s.to_css(dest)
+            },
+            ClassPrefix(ref s) => {
+                dest.write_char('.')?;
+                s.to_css(dest)?;
+                dest.write_char('*')
             },
             LocalName(ref s) => s.to_css(dest),
             ExplicitUniversalType => dest.write_char('*'),
@@ -2663,6 +2727,11 @@ impl<Impl: SelectorImpl> ToCss for Component<Impl> {
                     dest.write_char(')')?;
                 }
                 Ok(())
+            },
+            HostContext(ref selector) => {
+                dest.write_str(":host-context(")?;
+                selector.to_css(dest)?;
+                dest.write_char(')')
             },
             Nth(ref nth_data) => {
                 nth_data.write_start(dest)?;
@@ -3505,6 +3574,12 @@ where
             }
             return Ok(Component::Host(Some(parse_inner_compound_selector(parser, input, state)?)));
         },
+        "host-context" if parser.parse_host_context() => {
+            if !state.allows_tree_structural_pseudo_classes() {
+                return Err(ParseError::custom(SelectorParseErrorKind::InvalidState));
+            }
+            return Ok(Component::HostContext(parse_inner_compound_selector(parser, input, state)?));
+        },
         "not" => {
             return parse_negation(parser, input, state)
         },
@@ -3519,6 +3594,12 @@ where
         SelectorParsingState::AFTER_NON_ELEMENT_BACKED_PSEUDO | SelectorParsingState::AFTER_SLOTTED,
     ) {
         return Err(ParseError::custom(SelectorParseErrorKind::InvalidState));
+    }
+
+    if name.eq_ignore_ascii_case("has-slotted") && parser.parse_has_slotted_argument() {
+        return Ok(Component::HasSlotted(parse_inner_compound_selector(
+            parser, input, state,
+        )?));
     }
 
     let after_part = state.intersects(SelectorParsingState::AFTER_PART_LIKE);
@@ -3622,13 +3703,25 @@ where
                 Component::ParentSelector
             } else {
                 let class = match *input.next_including_whitespace()? {
-                    Token::Ident(ref class) => class,
+                    Token::Ident(ref class) => class.clone(),
                     _ => {
                         let e = SelectorParseErrorKind::ClassNeedsIdent;
                         return Err(ParseError::custom(e));
                     },
                 };
-                Component::Class(class.as_ref().into())
+                if class.ends_with('-')
+                    && parser.parse_class_prefix()
+                    && input
+                        .try_parse(|input| match input.next_including_whitespace() {
+                            Ok(&Token::Delim('*')) => Ok(()),
+                            _ => Err(()),
+                        })
+                        .is_ok()
+                {
+                    Component::ClassPrefix(class.as_ref().into())
+                } else {
+                    Component::Class(class.as_ref().into())
+                }
             })
         },
         Token::SquareBracketBlock => {

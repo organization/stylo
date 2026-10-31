@@ -12,6 +12,7 @@
 "layout.css.basic-shape-shape.enabled" = false
 "layout.css.break.enabled" = false
 "layout.css.calc-typed-arithmetic.enabled" = true
+"layout.css.class-prefix-selector.enabled" = false
 "layout.css.color-mix-multi-color.enabled" = true
 "layout.css.columns.enabled" = false
 "layout.css.contain.enabled" = false
@@ -41,6 +42,8 @@
 "layout.css.block-step.enabled" = false
 "layout.css.grid-template-subgrid-value.enabled" = false
 "layout.css.has-selector.enabled" = false
+"layout.css.has-slotted-argument.enabled" = false
+"layout.css.host-context.enabled" = false
 "layout.css.hyphens.enabled" = false
 "layout.css.image-orientation.enabled" = false
 "layout.css.initial-letter.enabled" = false
