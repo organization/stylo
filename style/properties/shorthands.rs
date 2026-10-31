@@ -2888,6 +2888,9 @@ pub mod background {
             {
                 clip = Some(background_clip::single_value::SpecifiedValue::from(origin));
             }
+            if origin.is_none() && matches!(clip, Some(Clip::BorderArea | Clip::BorderAreaText)) {
+                origin = Some(Origin::BorderBox);
+            }
             if let Some(position) = position {
                 background_position_x.push(position.horizontal);
                 background_position_y.push(position.vertical);
@@ -3023,7 +3026,11 @@ pub mod background {
                     writer.item(attachment)?;
                 }
 
-                if *origin != Origin::PaddingBox || *clip != Clip::BorderBox {
+                if matches!(*clip, Clip::BorderArea | Clip::BorderAreaText)
+                    && *origin == Origin::BorderBox
+                {
+                    writer.item(clip)?;
+                } else if *origin != Origin::PaddingBox || *clip != Clip::BorderBox {
                     writer.item(origin)?;
                     if *clip != From::from(*origin) {
                         writer.item(clip)?;
