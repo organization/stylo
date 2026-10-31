@@ -22,10 +22,10 @@ pub use crate::values::specified::box_::{
     BlockStepInsert, BlockStepRound, BoxAlign, BoxCollapse, BoxDirection, BoxOrient, BoxPack,
     BreakBetween, BreakWithin, Clear, Contain, ContainerName, ContainerType, ContentVisibility,
     DirectionProperty, Display, DominantBaseline, Float, ImageOrientation, Isolation, MarginTrim,
-    Orient, Overflow, OverflowAnchor, OverscrollBehavior, PositionProperty, ScrollAxisLock,
-    ScrollBehavior, ScrollMarkerGroup, ScrollSnapAlign, ScrollSnapAxis, ScrollSnapStop,
-    ScrollSnapStrictness, ScrollSnapType, ScrollTargetGroup, ScrollbarGutter, TextOrientation,
-    TopLayer, TouchAction, Visibility, WillChange, WritingModeProperty,
+    Orient, Overflow, OverflowAnchor, OverscrollBehavior, PositionProperty, ReadingFlow,
+    ScrollAxisLock, ScrollBehavior, ScrollMarkerGroup, ScrollSnapAlign, ScrollSnapAxis,
+    ScrollSnapStop, ScrollSnapStrictness, ScrollSnapType, ScrollTargetGroup, ScrollbarGutter,
+    TextOrientation, TopLayer, TouchAction, Visibility, WillChange, WritingModeProperty,
 };
 pub use crate::values::specified::box_::{BlockEllipsis, Continue};
 

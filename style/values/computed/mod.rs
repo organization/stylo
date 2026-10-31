@@ -72,10 +72,10 @@ pub use self::box_::{
     ContainIntrinsicSize, ContainerName, ContainerType, ContentVisibility, Continue,
     DirectionProperty, Display, DominantBaseline, Float, ImageOrientation, Isolation, LineClamp,
     MarginTrim, MaxLines, Orient, Overflow, OverflowAnchor, OverflowClipMargin, OverscrollBehavior,
-    Perspective, PositionProperty, Resize, ScrollAxisLock, ScrollBehavior, ScrollMarkerGroup,
-    ScrollSnapAlign, ScrollSnapAxis, ScrollSnapStop, ScrollSnapStrictness, ScrollSnapType,
-    ScrollTargetGroup, ScrollbarGutter, ScrollbarInset, TextOrientation, TopLayer, TouchAction,
-    Visibility, WillChange, WritingModeProperty, Zoom,
+    Perspective, PositionProperty, ReadingFlow, Resize, ScrollAxisLock, ScrollBehavior,
+    ScrollMarkerGroup, ScrollSnapAlign, ScrollSnapAxis, ScrollSnapStop, ScrollSnapStrictness,
+    ScrollSnapType, ScrollTargetGroup, ScrollbarGutter, ScrollbarInset, TextOrientation, TopLayer,
+    TouchAction, Visibility, WillChange, WritingModeProperty, Zoom,
 };
 pub use self::color::{
     Color, ColorOrAuto, ColorPropertyValue, ColorScheme, ForcedColorAdjust, PrintColorAdjust,

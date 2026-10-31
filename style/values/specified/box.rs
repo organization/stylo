@@ -2431,6 +2431,38 @@ pub enum ScrollBehavior {
     Smooth,
 }
 
+/// https://drafts.csswg.org/css-display-4/#reading-flow
+#[allow(missing_docs)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Deserialize,
+    Eq,
+    FromPrimitive,
+    Hash,
+    MallocSizeOf,
+    Parse,
+    PartialEq,
+    Serialize,
+    SpecifiedValueInfo,
+    ToComputedValue,
+    ToCss,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+#[repr(u8)]
+pub enum ReadingFlow {
+    Normal,
+    SourceOrder,
+    FlexVisual,
+    FlexFlow,
+    GridRows,
+    GridColumns,
+    GridOrder,
+}
+
 /// https://drafts.fxtf.org/compositing/#isolation
 #[allow(missing_docs)]
 #[derive(

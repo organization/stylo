@@ -1691,6 +1691,23 @@ spec = "https://drafts.csswg.org/css-flexbox/#order-property"
 servo_restyle_damage = "rebuild_box"
 affects = "layout"
 
+[reading-flow]
+type = "ReadingFlow"
+initial = "computed::ReadingFlow::Normal"
+struct = "position"
+engine = "servo"
+animation_type = "none"
+spec = "https://drafts.csswg.org/css-display-4/#reading-flow"
+affects = ""
+
+[reading-order]
+type = "Integer"
+initial = "0"
+struct = "position"
+engine = "servo"
+spec = "https://drafts.csswg.org/css-display-4/#reading-order"
+affects = ""
+
 [outline-color]
 type = "ColorOrAuto"
 initial = "generics::color::ColorOrAuto::Auto"
