@@ -427,7 +427,12 @@ impl NonCustomPropertyId {
     }
 
     pub(super) fn allowed_in(self, context: &ParserContext) -> bool {
-        if !self.allowed_in_rule(context.rule_types()) {
+        let mut rule_types = context.rule_types();
+        // Margin boxes take the properties of other boxes, not the @page descriptors.
+        if rule_types.contains(CssRuleType::Margin) {
+            rule_types = CssRuleType::Style.into();
+        }
+        if !self.allowed_in_rule(rule_types) {
             return false;
         }
 

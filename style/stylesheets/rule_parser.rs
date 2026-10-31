@@ -299,8 +299,8 @@ impl AtRuleType {
             "position-try" if crate::pref!("layout.css.anchor-positioning.enabled", gecko = true) => Self::PositionTry,
             "view-transition" if crate::pref!("dom.viewTransitions.cross-document.enabled") => Self::ViewTransition,
             _ => {
-                // The margin at-rules supported within @page.
-                if cfg!(feature = "gecko") && crate::pref!("layout.css.margin-rules.enabled")
+                // The margin at-rules supported within @page, which are unknown elsewhere.
+                if crate::pref!("layout.css.margin-rules.enabled") && context.in_page_rule()
                     && let Some(rule_type) = MarginRuleType::from_name(name) {
                         return Some(Self::Margin(rule_type));
                     }
@@ -862,6 +862,14 @@ impl<'a, 'i> NestedRuleParser<'a, 'i> {
         if wants_first_declaration_block {
             debug_assert!(parser.first_declaration_block.is_empty(), "How?");
             parser.first_declaration_block = declarations;
+        } else if parser.in_page_rule() {
+            // An @page rule has a single declaration block, so the declarations
+            // that follow its margin rules join it.
+            for (declaration, importance) in declarations.declaration_importance_iter() {
+                parser
+                    .first_declaration_block
+                    .push(declaration.clone(), importance);
+            }
         } else {
             let nested_rule = CssRule::NestedDeclarations(Arc::new(parser.shared_lock.wrap(
                 NestedDeclarationsRule {
