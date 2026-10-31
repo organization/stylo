@@ -48,6 +48,7 @@ pub enum PseudoElement {
     // Non-eager pseudos.
     Backdrop,
     DetailsContent,
+    InterestButton,
     Marker,
 
     // Implemented pseudos. These pseudo elements are representing the
@@ -92,6 +93,7 @@ pub enum PseudoElement {
     ScrollMarkerGroup,
     ScrollButton(ScrollButtonDirection),
     Column,
+    PermissionIcon,
 
     // A `::-webkit-*` pseudo-element that is not known, which is valid but never matches.
     UnknownWebkit(UnknownWebkitName),
@@ -177,7 +179,7 @@ impl ScrollButtonDirection {
 }
 
 /// The count of all pseudo-elements.
-pub const PSEUDO_COUNT: usize = 39;
+pub const PSEUDO_COUNT: usize = 41;
 
 /// The name of a `::highlight()` pseudo-element, interned so that
 /// [`PseudoElement`] stays `Copy`.
@@ -303,6 +305,8 @@ impl ToCss for PseudoElement {
             FirstLine => "::first-line",
             Backdrop => "::backdrop",
             DetailsContent => "::details-content",
+            InterestButton => "::interest-button",
+            PermissionIcon => "::permission-icon",
             Marker => "::marker",
             ColorSwatch => "::color-swatch",
             FileSelectorButton => "::file-selector-button",
@@ -488,6 +492,8 @@ impl PseudoElement {
             Column => 36,
             UnknownWebkit(..) => 37,
             Highlight(..) => 38,
+            InterestButton => 39,
+            PermissionIcon => 40,
         }
     }
 
@@ -614,6 +620,7 @@ impl PseudoElement {
             PseudoElement::Backdrop
             | PseudoElement::ColorSwatch
             | PseudoElement::FileSelectorButton
+            | PseudoElement::InterestButton
             | PseudoElement::Marker
             | PseudoElement::Placeholder
             | PseudoElement::DetailsContent
@@ -639,6 +646,7 @@ impl PseudoElement {
             | PseudoElement::ScrollMarkerGroup
             | PseudoElement::ScrollButton(..)
             | PseudoElement::Column
+            | PseudoElement::PermissionIcon
             | PseudoElement::UnknownWebkit(..)
             | PseudoElement::Highlight(..) => PseudoElementCascadeType::Lazy,
             PseudoElement::ServoAnonymousBox
@@ -819,6 +827,8 @@ pub enum NonTSPseudoClass {
     Hover,
     InRange,
     Indeterminate,
+    InterestSource,
+    InterestTarget,
     Invalid,
     Lang(Lang),
     Link,
@@ -922,6 +932,8 @@ impl ToCss for NonTSPseudoClass {
             Self::Hover => ":hover",
             Self::InRange => ":in-range",
             Self::Indeterminate => ":indeterminate",
+            Self::InterestSource => ":interest-source",
+            Self::InterestTarget => ":interest-target",
             Self::Invalid => ":invalid",
             Self::Link => ":link",
             Self::Modal => ":modal",
@@ -978,6 +990,8 @@ impl NonTSPseudoClass {
             Self::Hover => ElementState::HOVER,
             Self::InRange => ElementState::INRANGE,
             Self::Indeterminate => ElementState::INDETERMINATE,
+            Self::InterestSource => ElementState::INTEREST_SOURCE,
+            Self::InterestTarget => ElementState::INTEREST_TARGET,
             Self::Invalid => ElementState::INVALID,
             Self::Link => ElementState::UNVISITED,
             Self::Modal => ElementState::MODAL,
@@ -1124,6 +1138,8 @@ impl<'a, 'i> ::selectors::Parser<'i> for SelectorParser<'a> {
             "hover" => NonTSPseudoClass::Hover,
             "in-range" => NonTSPseudoClass::InRange,
             "indeterminate" => NonTSPseudoClass::Indeterminate,
+            "interest-source" if crate::pref!("layout.css.interest-invokers.enabled") => NonTSPseudoClass::InterestSource,
+            "interest-target" if crate::pref!("layout.css.interest-invokers.enabled") => NonTSPseudoClass::InterestTarget,
             "invalid" => NonTSPseudoClass::Invalid,
             "link" => NonTSPseudoClass::Link,
             "modal" => NonTSPseudoClass::Modal,
@@ -1208,6 +1224,8 @@ impl<'a, 'i> ::selectors::Parser<'i> for SelectorParser<'a> {
             "first-line" if crate::pref!("layout.css.first-line.enabled") => FirstLine,
             "marker" => Marker,
             "details-content" => DetailsContent,
+            "permission-icon" => PermissionIcon,
+            "interest-button" if crate::pref!("layout.css.interest-invokers.enabled") => InterestButton,
             "color-swatch" => ColorSwatch,
             "placeholder" => Placeholder,
             "-servo-text-control-inner-container" => {

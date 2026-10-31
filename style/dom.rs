@@ -491,6 +491,12 @@ pub trait TElement:
         false
     }
 
+    /// Return whether this element is a capability element such as <geolocation>, whose style is
+    /// restricted: https://wicg.github.io/PEPC/permission-element.html#styling
+    fn is_capability_element(&self) -> bool {
+        false
+    }
+
     /// Return the list of slotted nodes of this node.
     fn slotted_nodes(&self) -> &[Self::ConcreteNode] {
         &[]

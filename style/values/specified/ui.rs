@@ -6,10 +6,11 @@
 
 use crate::derives::*;
 use crate::parser::{Parse, ParserContext};
+use crate::values::generics::NonNegative;
 use crate::values::generics::ui as generics;
-use crate::values::specified::Number;
 use crate::values::specified::color::Color;
 use crate::values::specified::image::Image;
+use crate::values::specified::{Number, Time};
 use cssparser::Parser;
 use std::fmt::{self, Write};
 use style_traits::{
@@ -128,6 +129,22 @@ impl Parse for ScrollbarColor {
             thumb: Color::parse(context, input)?,
             track: Color::parse(context, input)?,
         })
+    }
+}
+
+/// A specified value for the `interest-delay-start` and `interest-delay-end` properties.
+pub type InterestDelay = generics::InterestDelay<NonNegative<Time>>;
+
+impl Parse for InterestDelay {
+    fn parse(context: &ParserContext, input: &mut Parser) -> Result<Self, ParseError> {
+        if input
+            .try_parse(|i| i.expect_ident_matching("normal"))
+            .is_ok()
+        {
+            return Ok(generics::InterestDelay::Normal);
+        }
+        Time::parse_non_negative(context, input)
+            .map(|time| generics::InterestDelay::Time(NonNegative(time)))
     }
 }
 

@@ -144,8 +144,9 @@ pub use self::tree_counting::TreeCountingFunction;
 #[cfg(feature = "gecko")]
 pub use self::ui::CursorImage;
 pub use self::ui::{
-    BoolInteger, Cursor, FieldSizing, ImeMode, Inert, Interactivity, MozTheme, PointerEvents,
-    ScrollbarColor, ScrollbarWidth, UserFocus, UserSelect, WindowDragging, WindowShadow,
+    BoolInteger, Cursor, FieldSizing, ImeMode, Inert, Interactivity, InterestDelay, MozTheme,
+    PointerEvents, ScrollbarColor, ScrollbarWidth, UserFocus, UserSelect, WindowDragging,
+    WindowShadow,
 };
 pub use super::generics::grid::GridTemplateComponent as GenericGridTemplateComponent;
 

@@ -145,3 +145,41 @@ impl<Color> Default for ScrollbarColor<Color> {
         ScrollbarColor::Auto
     }
 }
+
+/// A generic value for the `interest-delay-start` and `interest-delay-end` properties.
+///
+/// https://open-ui.org/components/interest-invokers.explainer/#the-interest-delay-css-properties
+#[derive(
+    Animate,
+    Clone,
+    ComputeSquaredDistance,
+    Copy,
+    Debug,
+    MallocSizeOf,
+    PartialEq,
+    SpecifiedValueInfo,
+    ToAnimatedValue,
+    ToAnimatedZero,
+    ToComputedValue,
+    ToCss,
+    ToResolvedValue,
+    ToShmem,
+    ToTyped,
+)]
+#[repr(C, u8)]
+pub enum GenericInterestDelay<Time> {
+    /// `normal`
+    Normal,
+    /// `<time [0s,∞]>`
+    Time(Time),
+}
+
+pub use self::GenericInterestDelay as InterestDelay;
+
+impl<Time> InterestDelay<Time> {
+    /// Returns the `normal` value.
+    #[inline]
+    pub fn normal() -> Self {
+        InterestDelay::Normal
+    }
+}

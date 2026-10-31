@@ -1034,6 +1034,155 @@ impl<'a, 'b: 'a> StyleAdjuster<'a, 'b> {
         }
     }
 
+    /// Capability elements such as <geolocation> ignore the properties that could disguise them
+    /// and keep others within bounds.
+    ///
+    /// https://wicg.github.io/PEPC/permission-element.html#styling
+    #[cfg(feature = "servo")]
+    fn adjust_for_capability_element<E>(&mut self, element: Option<E>)
+    where
+        E: TElement,
+    {
+        use crate::properties::longhands::cursor::computed_value::T as Cursor;
+        use crate::values::computed::font::{FontStyle, FontWeight};
+        use crate::values::computed::length::{MaxSize, Size};
+        use crate::values::computed::text::GenericLetterSpacing;
+        use crate::values::computed::{Length, LengthPercentage};
+        use crate::values::generics::NonNegative;
+        use crate::values::specified::ui::CursorKind;
+        use app_units::Au;
+
+        if self.style.pseudo.is_some() || !element.is_some_and(|e| e.is_capability_element()) {
+            return;
+        }
+        let font = self.style.get_font();
+        let em = font.font_size.computed_size().px();
+        let weight = font.font_weight;
+        let style = font.font_style;
+        let clamp = |value: &LengthPercentage, min: f32, max: f32| {
+            value.to_length().map(|length| {
+                LengthPercentage::new_length(Length::new(length.px().clamp(min, max)))
+            })
+        };
+        let length = |px: f32| NonNegative(LengthPercentage::new_length(Length::new(px.max(0.))));
+
+        if self.style.get_outline().outline_offset < Au(0) {
+            self.style.mutate_outline().set_outline_offset(Au(0));
+        }
+        if weight.value() < 200. {
+            self.style
+                .mutate_font()
+                .set_font_weight(FontWeight::from_float(200.));
+        }
+        if style != FontStyle::NORMAL && style != FontStyle::ITALIC {
+            self.style.mutate_font().set_font_style(FontStyle::NORMAL);
+        }
+
+        let text = self.style.get_inherited_text();
+        let word_spacing = clamp(&text.word_spacing, 0., em * 0.5);
+        let letter_spacing = clamp(&text.letter_spacing.0, em * -0.05, em * 0.2);
+        if let Some(value) = word_spacing {
+            self.style.mutate_inherited_text().set_word_spacing(value);
+        }
+        if let Some(value) = letter_spacing {
+            self.style
+                .mutate_inherited_text()
+                .set_letter_spacing(GenericLetterSpacing(value));
+        }
+
+        let initial = self.style.device.default_computed_values();
+        if self
+            .style
+            .get_effects()
+            .box_shadow
+            .0
+            .iter()
+            .any(|shadow| shadow.inset)
+        {
+            self.style
+                .mutate_effects()
+                .reset_box_shadow(initial.get_effects());
+        }
+
+        let position = self.style.get_position();
+        let width_auto = position.width.is_auto();
+        let height_auto = position.height.is_auto();
+        let min_height = match position.min_height {
+            Size::LengthPercentage(NonNegative(ref value)) => value.to_length().map(|l| l.px()),
+            _ => Some(0.),
+        };
+        let max_height = match position.max_height {
+            MaxSize::LengthPercentage(NonNegative(ref value)) => value.to_length().map(|l| l.px()),
+            _ => Some(f32::INFINITY),
+        };
+        if let Some(px) = min_height {
+            self.style
+                .mutate_position()
+                .set_min_height(Size::LengthPercentage(length(px.max(em).min(em * 3.))));
+        }
+        if let Some(px) = max_height {
+            self.style
+                .mutate_position()
+                .set_max_height(MaxSize::LengthPercentage(length(px.min(em * 3.))));
+        }
+        self.style.mutate_position().set_min_width(Size::FitContent);
+
+        let padding = self.style.get_padding();
+        let horizontal = if width_auto {
+            padding
+                .padding_left
+                .0
+                .to_length()
+                .map(|l| length(l.px().min(em * 5.)))
+        } else {
+            Some(length(0.))
+        };
+        let vertical = if height_auto {
+            padding
+                .padding_top
+                .0
+                .to_length()
+                .map(|l| length(l.px().min(em)))
+        } else {
+            Some(length(0.))
+        };
+        if let Some(value) = horizontal {
+            self.style.mutate_padding().set_padding_left(value.clone());
+            self.style.mutate_padding().set_padding_right(value);
+        }
+        if let Some(value) = vertical {
+            self.style.mutate_padding().set_padding_top(value.clone());
+            self.style.mutate_padding().set_padding_bottom(value);
+        }
+
+        let background = self.style.mutate_background();
+        background.reset_background_image(initial.get_background());
+        let border = self.style.mutate_border();
+        border.reset_border_image_source(initial.get_border());
+        border.reset_corner_top_left_shape(initial.get_border());
+        border.reset_corner_top_right_shape(initial.get_border());
+        border.reset_corner_bottom_left_shape(initial.get_border());
+        border.reset_corner_bottom_right_shape(initial.get_border());
+        let svg = self.style.mutate_svg();
+        svg.reset_clip_path(initial.get_svg());
+        svg.reset_mask_image(initial.get_svg());
+        let effects = self.style.mutate_effects();
+        effects.reset_filter(initial.get_effects());
+        let box_ = self.style.mutate_box();
+        box_.reset_transform(initial.get_box());
+        box_.reset_content_visibility(initial.get_box());
+        box_.reset_contain(initial.get_box());
+        box_.reset_container_type(initial.get_box());
+        box_.reset_container_name(initial.get_box());
+        let position = self.style.mutate_position();
+        position.reset_contain_intrinsic_width(initial.get_position());
+        position.reset_contain_intrinsic_height(initial.get_position());
+        self.style.mutate_inherited_ui().set_cursor(Cursor {
+            images: Default::default(),
+            keyword: CursorKind::Pointer,
+        });
+    }
+
     /// Adjusts the style to account for various fixups that don't fit naturally into the cascade.
     #[allow(unused_variables)]
     pub fn adjust<E>(
@@ -1090,6 +1239,8 @@ impl<'a, 'b: 'a> StyleAdjuster<'a, 'b> {
         #[cfg(feature = "gecko")]
         self.adjust_for_ruby(element);
         self.adjust_for_appearance(element);
+        #[cfg(feature = "servo")]
+        self.adjust_for_capability_element(element);
         #[cfg(feature = "gecko")]
         self.adjust_for_marker_pseudo(author_or_user_specified_properties);
         if !try_tactic.is_empty() {

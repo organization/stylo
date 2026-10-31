@@ -162,6 +162,10 @@ bitflags! {
         const HEADING_LEVEL_BITS = 0b1111u64 << HEADING_LEVEL_OFFSET;
         /// https://w3c.github.io/picture-in-picture/#css-pseudo-class
         const PICTURE_IN_PICTURE = 1u64 << 61;
+        /// https://drafts.csswg.org/selectors-5/#interest-source-pseudo
+        const INTEREST_SOURCE = 1u64 << 62;
+        /// https://drafts.csswg.org/selectors-5/#interest-target-pseudo
+        const INTEREST_TARGET = 1u64 << 63;
 
         /// Some convenience unions.
         const DIR_STATES = Self::LTR.bits() | Self::RTL.bits();

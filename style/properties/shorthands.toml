@@ -197,6 +197,13 @@ sub_properties = [
 spec = "https://drafts.csswg.org/css-backgrounds-3/#border"
 derive_value_info = false
 
+[interest-delay]
+engine = "servo"
+servo_pref = "layout.css.interest-invokers.enabled"
+sub_properties = ["interest-delay-start", "interest-delay-end"]
+spec = "https://open-ui.org/components/interest-invokers.explainer/#the-interest-delay-css-properties"
+kind = "two_properties"
+
 [overflow]
 sub_properties = ["overflow-x", "overflow-y"]
 spec="https://drafts.csswg.org/css-overflow/#propdef-overflow"

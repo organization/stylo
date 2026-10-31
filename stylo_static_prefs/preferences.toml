@@ -48,6 +48,7 @@
 "layout.css.hyphens.enabled" = false
 "layout.css.image-orientation.enabled" = false
 "layout.css.initial-letter.enabled" = false
+"layout.css.interest-invokers.enabled" = false
 "layout.css.light-dark.images.enabled" = false
 "layout.css.line-clamp.enabled" = false
 "layout.css.margin-rules.enabled" = false
