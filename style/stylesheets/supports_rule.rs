@@ -488,6 +488,11 @@ impl NamedFeature {
     /// <https://drafts.csswg.org/css-conditional-5/#typedef-supports-named-feature-fn>
     #[cfg(feature = "servo")]
     pub fn eval(self) -> bool {
-        false
+        match self {
+            Self::AnchorPositionFollowsTransforms => {
+                crate::pref!("layout.css.anchor-positioning.enabled")
+            },
+            Self::SingleAxisScrollContainer => false,
+        }
     }
 }
