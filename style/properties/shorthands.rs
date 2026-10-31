@@ -4283,7 +4283,8 @@ pub mod mask {
                 let has_clip = *clip != Clip::BorderBox;
 
                 if !has_other && !has_position && !has_origin && !has_clip {
-                    return image.to_css(dest);
+                    image.to_css(dest)?;
+                    continue;
                 }
 
                 let mut writer = SequenceWriter::new(dest, " ");
