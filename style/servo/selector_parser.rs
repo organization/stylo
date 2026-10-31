@@ -663,6 +663,22 @@ impl PseudoElement {
         matches!(*self, Self::Highlight(..))
     }
 
+    /// Whether this pseudo-element stands for a single pseudo-element of its
+    /// originating element, which a view transition pseudo-element without a
+    /// name in its argument does not.
+    pub fn names_one_element(&self) -> bool {
+        match *self {
+            Self::ViewTransitionGroup(argument)
+            | Self::ViewTransitionImagePair(argument)
+            | Self::ViewTransitionOld(argument)
+            | Self::ViewTransitionNew(argument) => PT_NAMES_AND_CLASSES.read().unwrap()
+                [argument.0 as usize]
+                .0
+                .is_some(),
+            _ => true,
+        }
+    }
+
     /// Whether this pseudo-element takes an argument.
     #[inline]
     pub fn has_argument(&self) -> bool {
