@@ -13,6 +13,7 @@ use crate::derives::*;
 use crate::dom::{OpaqueNode, TElement, TNode};
 use crate::invalidation::element::document_state::InvalidationMatchingData;
 use crate::invalidation::element::element_wrapper::ElementSnapshot;
+use crate::logical_geometry::{LogicalSide, PhysicalSide, WritingMode};
 use crate::properties::longhands::display::computed_value::T as Display;
 use crate::properties::{ComputedValues, PropertyFlags};
 use crate::selector_parser::AttrValue as SelectorAttrValue;
@@ -158,6 +159,22 @@ impl ScrollButtonDirection {
             "inline-start" => Self::InlineStart,
             "inline-end" => Self::InlineEnd,
             _ => return Err(ParseError::custom(SelectorParseErrorKind::UnexpectedIdent)),
+        })
+    }
+
+    /// The physical side this direction names in a scroll container with the given writing
+    /// mode, or `None` for `*`.
+    pub fn physical_side(self, writing_mode: WritingMode) -> Option<PhysicalSide> {
+        Some(match self {
+            Self::Any => return None,
+            Self::Up => PhysicalSide::Top,
+            Self::Down => PhysicalSide::Bottom,
+            Self::Left => PhysicalSide::Left,
+            Self::Right => PhysicalSide::Right,
+            Self::BlockStart => LogicalSide::BlockStart.to_physical(writing_mode),
+            Self::BlockEnd => LogicalSide::BlockEnd.to_physical(writing_mode),
+            Self::InlineStart => LogicalSide::InlineStart.to_physical(writing_mode),
+            Self::InlineEnd => LogicalSide::InlineEnd.to_physical(writing_mode),
         })
     }
 
