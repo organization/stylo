@@ -388,7 +388,7 @@ sub_properties = ["background-position-x", "background-position-y"]
 spec = "https://drafts.csswg.org/css-backgrounds-4/#the-background-position"
 
 [mask]
-sub_properties = ["mask-mode", "mask-repeat", "mask-clip", "mask-origin", "mask-composite", "mask-position-x", "mask-position-y", "mask-size", "mask-image"]
+sub_properties = ["mask-mode", "mask-repeat", "mask-clip", "mask-origin", "mask-composite", "mask-position-x", "mask-position-y", "mask-size", "mask-image", "mask-border-source", "mask-border-slice", "mask-border-width", "mask-border-outset", "mask-border-repeat", "mask-border-mode"]
 spec = "https://drafts.fxtf.org/css-masking/#propdef-mask"
 extra_prefixes = ["webkit"]
 servo_pref = "layout.css.masking.enabled"
