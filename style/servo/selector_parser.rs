@@ -1431,6 +1431,10 @@ impl ServoElementSnapshot {
 /// Returns whether the language is matched, as defined by
 /// [RFC 4647](https://tools.ietf.org/html/rfc4647#section-3.3.2).
 pub fn extended_filtering(tag: &str, range: &str) -> bool {
+    // A language tag subtag has at most eight characters, so a longer one makes the tag invalid.
+    if tag.split('\x2d').any(|subtag| subtag.len() > 8) {
+        return false;
+    }
     range.split(',').any(|lang_range| {
         // step 1
         let mut range_subtags = lang_range.split('\x2d');
