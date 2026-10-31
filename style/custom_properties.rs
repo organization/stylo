@@ -11,6 +11,7 @@ use crate::applicable_declarations::RevertKind;
 use crate::custom_properties_map::{CustomPropertiesMap, OwnMap};
 use crate::device::Device;
 use crate::dom::AttributeTracker;
+use crate::parser::{Parse, ParserContext};
 use crate::properties::{CSSWideKeyword, PrioritaryPropertyId, PropertyIdRef};
 use crate::properties_and_values::{
     rule::Descriptors as PropertyDescriptors,
@@ -20,17 +21,20 @@ use crate::properties_and_values::{
         SpecifiedValue as SpecifiedRegisteredValue,
     },
 };
-use crate::stylesheets::UrlExtraData;
 use crate::stylesheets::container_rule::AttrReferenceSet;
+use crate::stylesheets::{CssRuleType, Origin, UrlExtraData};
 use crate::stylist::Stylist;
 use crate::typed_om::{
     ToTyped, TypedValue, UnparsedSegment, UnparsedValue, VariableReferenceValue,
 };
-use crate::values::computed;
+use crate::values::computed::{self, ToComputedValue};
 use crate::values::generics::calc::SortKey as AttrUnit;
-use crate::values::specified::{NoCalcLength, ParsedNamespace};
+use crate::values::specified::{Integer, NoCalcLength, ParsedNamespace};
 use crate::{Atom, LocalName, Namespace, Prefix, derives::*};
-use cssparser::{CowRcStr, Delimiter, Parser, SourcePosition, Token, TokenSerializationType};
+use cssparser::{
+    CowRcStr, Delimiter, Delimiters, Parser, SourcePosition, Token, TokenSerializationType,
+};
+use selectors::matching::QuirksMode;
 use selectors::parser::SelectorParseErrorKind;
 use servo_arc::Arc;
 use smallvec::SmallVec;
@@ -38,7 +42,7 @@ use std::borrow::Cow;
 use std::fmt::{self, Write};
 use std::num;
 use std::ops::{Index, IndexMut};
-use style_traits::{CssString, CssWriter, ParseError, StyleParseErrorKind, ToCss};
+use style_traits::{CssString, CssWriter, ParseError, ParsingMode, StyleParseErrorKind, ToCss};
 use thin_vec::ThinVec;
 
 /// The environment from which to get `env` function values.
@@ -400,7 +404,7 @@ fn reify_variable_value_range(
         *reference_index += 1;
 
         if reference.substitution_kind != SubstitutionFunctionKind::Var
-            || reference.name_argument.is_some()
+            || reference.argument.is_some()
         {
             return Err(());
         }
@@ -665,7 +669,7 @@ impl<T> IndexMut<SingleNonCustomReference> for NonCustomReferenceMap<T> {
     }
 }
 
-/// Substitution function source: var, env, attr.
+/// Substitution function source: var, env, attr, ident.
 #[derive(Copy, Clone, Debug, MallocSizeOf, Hash, Eq, PartialEq, ToShmem, Parse)]
 pub enum SubstitutionFunctionKind {
     /// CSS variable / custom property
@@ -674,6 +678,8 @@ pub enum SubstitutionFunctionKind {
     Env,
     /// DOM attribute
     Attr,
+    /// An identifier built from its arguments
+    Ident,
 }
 
 /// A wrapper map that encapsulates both the custom properties and attributes
@@ -824,16 +830,17 @@ pub struct VariableFallback {
     pub references: References,
 }
 
-/// The name argument of a var() that is not a literal custom property name. It is substituted and
-/// only then parsed as a `<custom-property-name>`.
+/// An argument of a substitution function that is substituted before it is parsed: the name
+/// argument of a var() that is not a literal custom property name, or the argument of ident().
 /// https://drafts.csswg.org/css-variables-2/#replace-a-var-function
+/// https://drafts.csswg.org/css-values-5/#ident
 #[derive(Clone, Debug, MallocSizeOf, PartialEq, ToShmem)]
-pub struct VariableNameArgument {
+pub struct SubstitutionArgument {
     start: usize,
     end: usize,
     first_token_type: TokenSerializationType,
     last_token_type: TokenSerializationType,
-    /// References from the name argument.
+    /// References from the argument.
     pub references: References,
 }
 
@@ -842,9 +849,9 @@ pub struct VariableNameArgument {
 pub struct SubstitutionFunctionReference {
     /// The identifier for this substitution function (the first argument).
     pub name: Name,
-    /// For var(), the name argument when it is not a literal custom property name. `name` is
-    /// meaningless then.
-    pub name_argument: Option<Box<VariableNameArgument>>,
+    /// For var(), the name argument when it is not a literal custom property name, and for
+    /// ident(), its argument. `name` is meaningless then.
+    pub argument: Option<Box<SubstitutionArgument>>,
     start: usize,
     end: usize,
     /// The fallback for this function, if any.
@@ -1242,19 +1249,28 @@ fn parse_declaration_value_block(
                             input.reset(&prev);
                             next?;
                         }
-                        let (name, name_argument) =
-                            if substitution_kind == SubstitutionFunctionKind::Var {
-                                parse_var_name(
-                                    input,
-                                    input_start,
-                                    namespaces,
-                                    missing_closing_characters,
-                                )?
-                            } else {
-                                // TODO(emilio): For env() this should be <custom-ident> per spec, but no other browser does
-                                // that, see https://github.com/w3c/csswg-drafts/issues/3262.
-                                (Atom::from(input.expect_ident()?.as_ref()), None)
-                            };
+                        let (name, argument) = if substitution_kind == SubstitutionFunctionKind::Var
+                        {
+                            parse_var_name(
+                                input,
+                                input_start,
+                                namespaces,
+                                missing_closing_characters,
+                            )?
+                        } else if substitution_kind == SubstitutionFunctionKind::Ident {
+                            let argument = parse_substitution_argument(
+                                input,
+                                input_start,
+                                namespaces,
+                                missing_closing_characters,
+                                Delimiter::Bang | Delimiter::Semicolon,
+                            )?;
+                            (Atom::from(""), Some(Box::new(argument)))
+                        } else {
+                            // TODO(emilio): For env() this should be <custom-ident> per spec, but no other browser does
+                            // that, see https://github.com/w3c/csswg-drafts/issues/3262.
+                            (Atom::from(input.expect_ident()?.as_ref()), None)
+                        };
 
                         let attribute_kind = if substitution_kind == SubstitutionFunctionKind::Attr
                         {
@@ -1269,7 +1285,7 @@ fn parse_declaration_value_block(
                         let start = token_start.byte_index() - input_start.byte_index();
                         references.refs.push(SubstitutionFunctionReference {
                             name,
-                            name_argument,
+                            argument,
                             start,
                             // To be fixed up after parsing fallback and auto-closing via our_ref_index.
                             end: start,
@@ -1338,10 +1354,11 @@ fn parse_declaration_value_block(
                         SubstitutionFunctionKind::Var => ReferenceFlags::VAR,
                         SubstitutionFunctionKind::Env => ReferenceFlags::ENV,
                         SubstitutionFunctionKind::Attr => ReferenceFlags::ATTR,
+                        SubstitutionFunctionKind::Ident => ReferenceFlags::empty(),
                     };
                     // Bubble up flags from our name argument and fallback, so we know what we might
                     // reference from the outer scope.
-                    if let Some(ref argument) = reference.name_argument {
+                    if let Some(ref argument) = reference.argument {
                         references.flags |= argument.references.flags;
                     }
                     if let Some(ref fb) = reference.fallback {
@@ -1395,6 +1412,77 @@ fn parse_declaration_value_block(
     Ok((first_token_type, last_token_type))
 }
 
+/// Parses a non-empty `<declaration-value>` up to `delimiters` as a substitution function argument.
+fn parse_substitution_argument(
+    input: &mut Parser,
+    input_start: SourcePosition,
+    namespaces: Option<&FxHashMap<Prefix, Namespace>>,
+    missing_closing_characters: &mut String,
+    delimiters: Delimiters,
+) -> Result<SubstitutionArgument, ParseError> {
+    input.skip_whitespace();
+    let start = input.position();
+    let mut references = References::default();
+    let (first_token_type, last_token_type) = input.parse_until_before(delimiters, |input| {
+        parse_declaration_value_block(
+            input,
+            input_start,
+            namespaces,
+            &mut references,
+            missing_closing_characters,
+        )
+    })?;
+    if matches!(first_token_type, TokenSerializationType::Nothing) {
+        return Err(ParseError::custom(StyleParseErrorKind::UnspecifiedError));
+    }
+    Ok(SubstitutionArgument {
+        start: start.byte_index() - input_start.byte_index(),
+        end: input.position().byte_index() - input_start.byte_index(),
+        first_token_type,
+        last_token_type,
+        references,
+    })
+}
+
+/// Computes the arguments of ident(), `<ident-arg>+`, and concatenates them into an identifier.
+/// https://drafts.csswg.org/css-values-5/#ident
+fn compute_ident(
+    css: &str,
+    url_data: &UrlExtraData,
+    computed_context: &computed::Context,
+) -> Option<String> {
+    let context = ParserContext::new(
+        Origin::Author,
+        url_data,
+        Some(CssRuleType::Style),
+        ParsingMode::DEFAULT,
+        QuirksMode::NoQuirks,
+        Default::default(),
+        None,
+        None,
+        AttrTaint::default(),
+    );
+    let mut input = Parser::new(css);
+    let mut ident = String::new();
+    while !input.is_exhausted() {
+        if let Ok(piece) = input.try_parse(|input| match input.next()? {
+            Token::QuotedString(piece) | Token::Ident(piece) => Ok(piece.as_ref().to_owned()),
+            _ => Err(ParseError::unexpected_token()),
+        }) {
+            ident.push_str(&piece);
+            continue;
+        }
+        let integer = Integer::parse(&context, &mut input).ok()?;
+        write!(ident, "{}", integer.to_computed_value(computed_context)).ok()?;
+    }
+    if ident.is_empty() {
+        return None;
+    }
+    let mut css = String::new();
+    cssparser::serialize_identifier(&ident, &mut css).ok()?;
+    Some(css)
+}
+
 /// Parses a string that must be exactly one `<custom-property-name>`.
 fn parse_custom_property_name(css: &str) -> Result<Name, ()> {
     let mut input = Parser::new(css);
@@ -1413,7 +1501,7 @@ fn parse_var_name(
     input_start: SourcePosition,
     namespaces: Option<&FxHashMap<Prefix, Namespace>>,
     missing_closing_characters: &mut String,
-) -> Result<(Name, Option<Box<VariableNameArgument>>), ParseError> {
+) -> Result<(Name, Option<Box<SubstitutionArgument>>), ParseError> {
     let literal = input.try_parse(|input| {
         let name = Atom::from(
             parse_name(input.expect_ident()?.as_ref())
@@ -1498,7 +1586,7 @@ fn parse_var_name(
     }
     Ok((
         Atom::from(""),
-        Some(Box::new(VariableNameArgument {
+        Some(Box::new(SubstitutionArgument {
             start: start.byte_index() - input_start.byte_index(),
             end: end.byte_index() - input_start.byte_index(),
             first_token_type,
@@ -1691,7 +1779,9 @@ pub fn substitute_references_if_needed_and_apply(
                 .substitution_functions
                 .insert_attr(name, value);
         },
-        SubstitutionFunctionKind::Env => unreachable!("Kind cannot be env."),
+        SubstitutionFunctionKind::Env | SubstitutionFunctionKind::Ident => {
+            unreachable!("Kind cannot be env or ident.")
+        },
     }
     None
 }
@@ -1980,7 +2070,7 @@ fn substitute_one_reference<'a>(
     let mut name_tainted = false;
     let substitution: Option<_> = match reference.substitution_kind {
         SubstitutionFunctionKind::Var => {
-            let name = match reference.name_argument {
+            let name = match reference.argument {
                 None => Some(Cow::Borrowed(&reference.name)),
                 Some(ref argument) => {
                     let (name, tainted) = substitute_var_name(
@@ -2048,6 +2138,38 @@ fn substitute_one_reference<'a>(
                     )),
                 },
             }
+        },
+        SubstitutionFunctionKind::Ident => {
+            let argument = reference.argument.as_deref().unwrap();
+            do_substitute_chunk(
+                css,
+                argument.start,
+                argument.end,
+                argument.first_token_type,
+                argument.last_token_type,
+                url_data,
+                property_id,
+                substitution_functions,
+                stylist,
+                computed_context,
+                &argument.references.refs,
+                attribute_tracker,
+                seen,
+                /* attr_taint */ None,
+            )
+            .ok()
+            .and_then(|substitution| {
+                Some(Substitution::new(
+                    Cow::Owned(compute_ident(
+                        &substitution.css,
+                        url_data,
+                        computed_context,
+                    )?),
+                    TokenSerializationType::Ident,
+                    TokenSerializationType::Ident,
+                    substitution.attr_tainted,
+                ))
+            })
         },
         SubstitutionFunctionKind::Env => {
             let device = stylist.device();
@@ -2179,7 +2301,7 @@ fn substitute_one_reference<'a>(
 pub(crate) fn substitute_var_name(
     css: &str,
     url_data: &UrlExtraData,
-    argument: &VariableNameArgument,
+    argument: &SubstitutionArgument,
     property_id: Option<PropertyIdRef>,
     substitution_functions: &ComputedSubstitutionFunctions,
     stylist: &Stylist,

@@ -2088,7 +2088,7 @@ impl<'a> Cascade<'a> {
         refs_stack.push(refs);
         while let Some(refs) = refs_stack.pop() {
             for next in &refs.refs {
-                if let Some(ref argument) = next.name_argument {
+                if let Some(ref argument) = next.argument {
                     refs_stack.push(&argument.references);
                 }
                 if !next.is_attr_with_type() || !self.seen.custom.attr.insert(&next.name) {
@@ -2411,6 +2411,23 @@ fn substitute_all(
                     .environment()
                     .get(&next.name, device, url_data)
                     .is_none()
+            } else if next.substitution_kind == SubstitutionFunctionKind::Ident {
+                // ident() is always substituted from its argument, and has no fallback.
+                let argument = next.argument.as_deref().unwrap();
+                in_cycle |= visit_value_references(
+                    var,
+                    &argument.references,
+                    css,
+                    url_data,
+                    index,
+                    references_from_non_custom_properties,
+                    context,
+                    lowlink,
+                    self_ref,
+                    attribute_tracker,
+                    non_custom_references,
+                );
+                false
             } else {
                 let kind = next.substitution_kind;
                 let name = if kind == SubstitutionFunctionKind::Attr {
@@ -2431,7 +2448,7 @@ fn substitute_all(
                         context.map_mut().insert_attr(&next.name, val);
                     }
                     Some(next.name.clone())
-                } else if let Some(ref argument) = next.name_argument {
+                } else if let Some(ref argument) = next.argument {
                     // The name argument is always substituted, so its references are
                     // dependencies, and the custom property it names is one once it resolves.
                     in_cycle |= visit_value_references(

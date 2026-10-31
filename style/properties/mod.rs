@@ -787,7 +787,7 @@ impl ShorthandId {
 }
 
 /// The arbitrary substitution functions we support.
-pub const ARBITRARY_SUBSTITUTION_FUNCTIONS: &[&str] = &["var", "env", "attr"];
+pub const ARBITRARY_SUBSTITUTION_FUNCTIONS: &[&str] = &["var", "env", "attr", "ident"];
 
 fn parse_non_custom_property_declaration_value_into(
     declarations: &mut SourcePropertyDeclaration,
