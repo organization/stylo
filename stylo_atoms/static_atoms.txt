@@ -63,6 +63,7 @@ device-pixel-ratio
 device-width
 dir
 display-mode
+display-state
 durationchange
 dynamic-range
 email
@@ -127,6 +128,7 @@ mousedown
 mousemove
 mouseover
 mouseup
+navigation-controls
 negotiationneeded
 none
 normal
@@ -150,6 +152,7 @@ postershown
 prefers-color-scheme
 prefers-contrast
 prefers-reduced-motion
+prefers-reduced-data
 prefers-reduced-transparency
 print
 progress
@@ -162,6 +165,7 @@ reftest-wait
 rejectionhandled
 removetrack
 reset
+resizable
 resize
 resolution
 resourcetimingbufferfull

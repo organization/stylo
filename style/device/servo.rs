@@ -13,7 +13,7 @@ use crate::media_queries::MediaType;
 use crate::properties::ComputedValues;
 use crate::properties::style_structs::Font;
 use crate::queries::values::PrefersColorScheme;
-use crate::servo::media_features::PointerCapabilities;
+use crate::servo::media_features::{PointerCapabilities, PrefersContrast};
 use crate::values::KeyframesName;
 use crate::values::computed::font::GenericFontFamily;
 use crate::values::computed::{
@@ -85,6 +85,15 @@ pub struct MediaData {
     /// The union of the capabilities of all pointer inputs
     #[ignore_malloc_size_of = "Pure stack type"]
     pub all_pointer_capabilities: PointerCapabilities,
+    /// The contrast the user prefers.
+    #[ignore_malloc_size_of = "Pure stack type"]
+    pub prefers_contrast: PrefersContrast,
+    /// Whether the user prefers reduced motion.
+    pub prefers_reduced_motion: bool,
+    /// Whether the user prefers reduced transparency.
+    pub prefers_reduced_transparency: bool,
+    /// Whether the user prefers reduced data usage.
+    pub prefers_reduced_data: bool,
 }
 
 impl Device {

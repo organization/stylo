@@ -169,11 +169,51 @@ enum DisplayMode {
     Standalone,
     Fullscreen,
     PictureInPicture,
+    WindowControlsOverlay,
+    Unframed,
 }
 
 /// https://w3c.github.io/manifest/#the-display-mode-media-feature
 fn eval_display_mode(_: &Context, query_value: Option<DisplayMode>) -> bool {
     query_value.is_none_or(|value| value == DisplayMode::Browser)
+}
+
+#[derive(Clone, Copy, Debug, FromPrimitive, Parse, PartialEq, ToCss)]
+#[repr(u8)]
+enum DisplayState {
+    Normal,
+    Minimized,
+    Maximized,
+    Fullscreen,
+}
+
+/// https://github.com/explainers-by-googlers/additional-windowing-controls
+fn eval_display_state(_: &Context, query_value: Option<DisplayState>) -> bool {
+    query_value.is_none_or(|value| value == DisplayState::Normal)
+}
+
+#[derive(Clone, Copy, Debug, FromPrimitive, Parse, PartialEq, ToCss)]
+#[repr(u8)]
+enum Resizable {
+    True,
+    False,
+}
+
+/// https://github.com/explainers-by-googlers/additional-windowing-controls
+fn eval_resizable(_: &Context, query_value: Option<Resizable>) -> bool {
+    query_value.is_none_or(|value| value == Resizable::True)
+}
+
+#[derive(Clone, Copy, Debug, FromPrimitive, Parse, PartialEq, ToCss)]
+#[repr(u8)]
+enum NavigationControls {
+    None,
+    BackButton,
+}
+
+/// https://github.com/fallaciousreasoning/backbutton-mediaquery/blob/master/explainer.md
+fn eval_navigation_controls(_: &Context, query_value: Option<NavigationControls>) -> bool {
+    query_value.is_none_or(|value| value == NavigationControls::BackButton)
 }
 
 /// https://drafts.csswg.org/mediaqueries-4/#grid
@@ -216,24 +256,59 @@ enum Preference {
     Reduce,
 }
 
-/// https://drafts.csswg.org/mediaqueries-5/#prefers-reduced-motion
-/// https://drafts.csswg.org/mediaqueries-5/#prefers-reduced-transparency
-fn eval_no_preference(_: &Context, query_value: Option<Preference>) -> bool {
-    query_value == Some(Preference::NoPreference)
+fn eval_reduce(reduce: bool, query_value: Option<Preference>) -> bool {
+    match query_value {
+        None | Some(Preference::Reduce) => reduce,
+        Some(Preference::NoPreference) => !reduce,
+    }
 }
 
-#[derive(Clone, Copy, Debug, FromPrimitive, Parse, PartialEq, ToCss)]
+/// https://drafts.csswg.org/mediaqueries-5/#prefers-reduced-motion
+fn eval_prefers_reduced_motion(context: &Context, query_value: Option<Preference>) -> bool {
+    eval_reduce(
+        context.device().media_data().prefers_reduced_motion,
+        query_value,
+    )
+}
+
+/// https://drafts.csswg.org/mediaqueries-5/#prefers-reduced-transparency
+fn eval_prefers_reduced_transparency(context: &Context, query_value: Option<Preference>) -> bool {
+    eval_reduce(
+        context.device().media_data().prefers_reduced_transparency,
+        query_value,
+    )
+}
+
+/// https://drafts.csswg.org/mediaqueries-5/#prefers-reduced-data
+fn eval_prefers_reduced_data(context: &Context, query_value: Option<Preference>) -> bool {
+    eval_reduce(
+        context.device().media_data().prefers_reduced_data,
+        query_value,
+    )
+}
+
+/// Values for the prefers-contrast media feature.
+#[derive(Clone, Copy, Debug, Default, FromPrimitive, Parse, PartialEq, ToCss)]
 #[repr(u8)]
-enum PrefersContrast {
+pub enum PrefersContrast {
+    /// The user prefers more contrast.
     More,
+    /// The user prefers less contrast.
     Less,
+    /// The user prefers a contrast that is neither more nor less.
     Custom,
+    /// The user has no contrast preference.
+    #[default]
     NoPreference,
 }
 
 /// https://drafts.csswg.org/mediaqueries-5/#prefers-contrast
-fn eval_prefers_contrast(_: &Context, query_value: Option<PrefersContrast>) -> bool {
-    query_value == Some(PrefersContrast::NoPreference)
+fn eval_prefers_contrast(context: &Context, query_value: Option<PrefersContrast>) -> bool {
+    let contrast = context.device().media_data().prefers_contrast;
+    match query_value {
+        Some(value) => value == contrast,
+        None => contrast != PrefersContrast::NoPreference,
+    }
 }
 
 /// https://drafts.csswg.org/mediaqueries-5/#forced-colors
@@ -344,7 +419,7 @@ fn eval_aspect_ratio(context: &Context) -> Ratio {
 }
 
 /// A list with all the media features that Servo supports.
-pub static MEDIA_FEATURES: [QueryFeatureDescription; 33] = [
+pub static MEDIA_FEATURES: [QueryFeatureDescription; 37] = [
     feature!(
         atom!("width"),
         AllowsRanges::Yes,
@@ -448,6 +523,24 @@ pub static MEDIA_FEATURES: [QueryFeatureDescription; 33] = [
         FeatureFlags::empty(),
     ),
     feature!(
+        atom!("display-state"),
+        AllowsRanges::No,
+        keyword_evaluator!(eval_display_state, DisplayState),
+        FeatureFlags::empty(),
+    ),
+    feature!(
+        atom!("resizable"),
+        AllowsRanges::No,
+        keyword_evaluator!(eval_resizable, Resizable),
+        FeatureFlags::empty(),
+    ),
+    feature!(
+        atom!("navigation-controls"),
+        AllowsRanges::No,
+        keyword_evaluator!(eval_navigation_controls, NavigationControls),
+        FeatureFlags::empty(),
+    ),
+    feature!(
         atom!("grid"),
         AllowsRanges::No,
         Evaluator::BoolInteger(eval_grid),
@@ -480,13 +573,19 @@ pub static MEDIA_FEATURES: [QueryFeatureDescription; 33] = [
     feature!(
         atom!("prefers-reduced-motion"),
         AllowsRanges::No,
-        keyword_evaluator!(eval_no_preference, Preference),
+        keyword_evaluator!(eval_prefers_reduced_motion, Preference),
         FeatureFlags::empty(),
     ),
     feature!(
         atom!("prefers-reduced-transparency"),
         AllowsRanges::No,
-        keyword_evaluator!(eval_no_preference, Preference),
+        keyword_evaluator!(eval_prefers_reduced_transparency, Preference),
+        FeatureFlags::empty(),
+    ),
+    feature!(
+        atom!("prefers-reduced-data"),
+        AllowsRanges::No,
+        keyword_evaluator!(eval_prefers_reduced_data, Preference),
         FeatureFlags::empty(),
     ),
     feature!(
