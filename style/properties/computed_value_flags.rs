@@ -143,6 +143,10 @@ bitflags! {
 
         /// Whether this style uses an element-scoped `random()`.
         const USES_ELEMENT_SCOPED_RANDOM = 1 << 29;
+
+        /// A flag used to mark styles which have a `container-type` that
+        /// includes `scroll-state`, or under one.
+        const SELF_OR_ANCESTOR_HAS_SCROLL_STATE_CONTAINER_TYPE = 1 << 30;
     }
 }
 
@@ -163,6 +167,7 @@ impl ComputedValueFlags {
             | Self::IS_IN_OPACITY_ZERO_SUBTREE
             | Self::SELF_OR_ANCESTOR_HAS_CONTAIN_STYLE
             | Self::SELF_OR_ANCESTOR_HAS_SIZE_CONTAINER_TYPE
+            | Self::SELF_OR_ANCESTOR_HAS_SCROLL_STATE_CONTAINER_TYPE
             | Self::IS_IN_APPEARANCE_BASE_SUBTREE
     }
 
