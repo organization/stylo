@@ -153,8 +153,10 @@ impl<L: ToCss> ToCss for ContainIntrinsicSize<L> {
     ToCss,
     ToResolvedValue,
     ToShmem,
+    ToTyped,
 )]
 #[repr(C, u8)]
+#[typed(todo_derive_fields)]
 pub enum BlockEllipsis {
     /// Display the ellipsis character.
     Ellipsis,

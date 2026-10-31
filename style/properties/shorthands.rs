@@ -2682,6 +2682,124 @@ pub mod transition {
     }
 }
 
+#[cfg(feature = "servo")]
+pub mod line_clamp {
+    pub use crate::properties::generated::shorthands::line_clamp::*;
+
+    use super::*;
+    use crate::values::computed::Continue;
+    use crate::values::generics::box_::BlockEllipsis;
+    use crate::values::specified::{LineClamp, MaxLines};
+
+    pub fn parse_value(
+        context: &ParserContext,
+        input: &mut Parser,
+    ) -> Result<Longhands, ParseError> {
+        if input.try_parse(|i| i.expect_ident_matching("none")).is_ok() {
+            return Ok(expanded! {
+                max_lines: MaxLines::auto(),
+                block_ellipsis: BlockEllipsis::NoEllipsis,
+                continue_: Continue::Normal,
+            });
+        }
+        let value = LineClamp::parse(context, input)?;
+        Ok(expanded! {
+            max_lines: value.max_lines,
+            block_ellipsis: value.block_ellipsis,
+            continue_: if value.webkit_legacy {
+                Continue::WebkitLegacy
+            } else {
+                Continue::Collapse
+            },
+        })
+    }
+
+    impl<'a> ToCss for LonghandsToSerialize<'a> {
+        fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
+        where
+            W: fmt::Write,
+        {
+            match *self.continue_ {
+                Continue::Normal
+                    if self.max_lines.is_auto()
+                        && matches!(
+                            *self.block_ellipsis,
+                            BlockEllipsis::Ellipsis | BlockEllipsis::NoEllipsis
+                        ) =>
+                {
+                    dest.write_str("none")
+                },
+                Continue::Collapse | Continue::WebkitLegacy => {
+                    let mut writer = SequenceWriter::new(dest, " ");
+                    writer.item(self.max_lines)?;
+                    if !self.block_ellipsis.is_ellipsis() {
+                        writer.item(self.block_ellipsis)?;
+                    }
+                    if *self.continue_ == Continue::WebkitLegacy {
+                        writer.raw_item("-webkit-legacy")?;
+                    }
+                    Ok(())
+                },
+                _ => Ok(()),
+            }
+        }
+    }
+}
+
+#[cfg(feature = "servo")]
+pub mod _webkit_line_clamp {
+    pub use crate::properties::generated::shorthands::_webkit_line_clamp::*;
+
+    use super::*;
+    use crate::values::computed::Continue;
+    use crate::values::generics::box_::BlockEllipsis;
+    use crate::values::specified::{MaxLines, PositiveInteger};
+
+    pub fn parse_value(
+        context: &ParserContext,
+        input: &mut Parser,
+    ) -> Result<Longhands, ParseError> {
+        let lines = input.try_parse(|i| PositiveInteger::parse(context, i));
+        if lines.is_err() {
+            input.expect_ident_matching("none")?;
+        }
+        Ok(expanded! {
+            continue_: if lines.is_ok() {
+                Continue::WebkitLegacy
+            } else {
+                Continue::Normal
+            },
+            max_lines: lines.map_or_else(|_| MaxLines::auto(), |lines| MaxLines::lines(lines, false)),
+            block_ellipsis: BlockEllipsis::Ellipsis,
+        })
+    }
+
+    impl<'a> ToCss for LonghandsToSerialize<'a> {
+        fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
+        where
+            W: fmt::Write,
+        {
+            match (
+                *self.continue_,
+                self.block_ellipsis,
+                self.max_lines.lines_value(),
+            ) {
+                (Continue::Normal, BlockEllipsis::Ellipsis | BlockEllipsis::NoEllipsis, None)
+                    if self.max_lines.is_auto() =>
+                {
+                    dest.write_str("none")
+                },
+                (Continue::WebkitLegacy, BlockEllipsis::Ellipsis, Some(lines))
+                    if self.max_lines.kw.is_none() =>
+                {
+                    lines.to_css(dest)
+                },
+                _ => Ok(()),
+            }
+        }
+    }
+}
+
 pub mod outline {
     pub use crate::properties::generated::shorthands::outline::*;
 

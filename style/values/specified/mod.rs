@@ -45,15 +45,15 @@ pub use self::border::{
 };
 pub use self::box_::{
     AlignmentBaseline, Appearance, BackfaceVisibility, BaselineShift, BaselineSource,
-    BlockStepAlign, BlockStepInsert, BlockStepRound, BlockStepSize, BoxAlign, BoxCollapse,
-    BoxDirection, BoxOrient, BoxPack, BreakBetween, BreakWithin, Clear, Contain,
-    ContainIntrinsicSize, ContainerName, ContainerType, ContentVisibility, DirectionProperty,
-    Display, DominantBaseline, Float, ImageOrientation, Isolation, LineClamp, MarginTrim, Orient,
-    Overflow, OverflowAnchor, OverflowClipMargin, OverscrollBehavior, Perspective,
-    PositionProperty, Resize, ScrollAxisLock, ScrollBehavior, ScrollMarkerGroup, ScrollSnapAlign,
-    ScrollSnapAxis, ScrollSnapStop, ScrollSnapStrictness, ScrollSnapType, ScrollTargetGroup,
-    ScrollbarGutter, ScrollbarInset, TextOrientation, TopLayer, TouchAction, Visibility,
-    WillChange, WillChangeBits, WritingModeProperty, Zoom,
+    BlockEllipsis, BlockStepAlign, BlockStepInsert, BlockStepRound, BlockStepSize, BoxAlign,
+    BoxCollapse, BoxDirection, BoxOrient, BoxPack, BreakBetween, BreakWithin, Clear, Contain,
+    ContainIntrinsicSize, ContainerName, ContainerType, ContentVisibility, Continue,
+    DirectionProperty, Display, DominantBaseline, Float, ImageOrientation, Isolation, LineClamp,
+    MarginTrim, MaxLines, Orient, Overflow, OverflowAnchor, OverflowClipMargin, OverscrollBehavior,
+    Perspective, PositionProperty, Resize, ScrollAxisLock, ScrollBehavior, ScrollMarkerGroup,
+    ScrollSnapAlign, ScrollSnapAxis, ScrollSnapStop, ScrollSnapStrictness, ScrollSnapType,
+    ScrollTargetGroup, ScrollbarGutter, ScrollbarInset, TextOrientation, TopLayer, TouchAction,
+    Visibility, WillChange, WillChangeBits, WritingModeProperty, Zoom,
 };
 pub use self::calc::{CalcLengthPercentage, CalcNumeric};
 pub use self::color::{

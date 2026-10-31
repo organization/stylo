@@ -10,8 +10,8 @@ use crate::values::computed::length::{Length, LengthPercentage, NonNegativeLengt
 use crate::values::computed::{Context, Integer, Number, ToComputedValue};
 use crate::values::generics::GreaterThanOrEqualToOne;
 use crate::values::generics::box_::{
-    GenericBaselineShift, GenericContainIntrinsicSize, GenericLineClamp, GenericOverflowClipMargin,
-    GenericPerspective, GenericScrollbarInset,
+    GenericBaselineShift, GenericContainIntrinsicSize, GenericLineClamp, GenericMaxLines,
+    GenericOverflowClipMargin, GenericPerspective, GenericScrollbarInset,
 };
 use crate::values::specified::box_ as specified;
 use std::fmt;
@@ -27,6 +27,7 @@ pub use crate::values::specified::box_::{
     ScrollSnapStrictness, ScrollSnapType, ScrollTargetGroup, ScrollbarGutter, TextOrientation,
     TopLayer, TouchAction, Visibility, WillChange, WritingModeProperty,
 };
+pub use crate::values::specified::box_::{BlockEllipsis, Continue};
 
 /// A computed value for the `baseline-shift` property.
 pub type BaselineShift = GenericBaselineShift<LengthPercentage>;
@@ -53,6 +54,9 @@ impl ContainIntrinsicSize {
 
 /// A computed value for the `line-clamp` property.
 pub type LineClamp = GenericLineClamp<GreaterThanOrEqualToOne<Integer>>;
+
+/// A computed value for the `max-lines` property.
+pub type MaxLines = GenericMaxLines<GreaterThanOrEqualToOne<Integer>>;
 
 /// A computed value for the `perspective` property.
 pub type Perspective = GenericPerspective<NonNegativeLength>;

@@ -187,7 +187,7 @@ def rule_values_from_arg(rule_types):
 
 def to_rust_ident(name):
     name = name.replace("-", "_")
-    if name in ["static", "super", "box", "move"]:  # Rust keywords
+    if name in ["static", "super", "box", "move", "continue"]:  # Rust keywords
         name += "_"
     return name
 
@@ -645,6 +645,7 @@ class Longhand(Property):
                 "FillRule",
                 "FlexWrap",
                 "Float",
+                "Continue",
                 "FontLanguageOverride",
                 "FontSynthesis",
                 "FontSynthesisStyle",
@@ -1010,7 +1011,7 @@ class PropertiesData(object):
             open(os.path.join(os.path.dirname(__file__), "shorthands.toml")).read()
         )
         for name, args in shorthands_toml.items():
-            self.declare_shorthand(name, **args)
+            self.declare_shorthand(args.pop("name", name), **args)
         self.declare_all_shorthand()
 
         self.font_face_descriptors = self._load_descriptors(

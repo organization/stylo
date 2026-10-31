@@ -99,10 +99,40 @@ type = "LineClamp"
 initial = "computed::LineClamp::none()"
 struct = "box"
 boxed = true
-servo_pref = "layout.css.line-clamp.enabled"
+engine = "gecko"
 gecko_pref = "layout.css.line-clamp.enabled"
 gecko_ffi_name = "mWebkitLineClamp"
 spec = "https://drafts.csswg.org/css-overflow-4/#propdef-line-clamp"
+affects = "layout"
+
+[max-lines]
+type = "MaxLines"
+initial = "computed::MaxLines::auto()"
+struct = "box"
+engine = "servo"
+servo_pref = "layout.css.line-clamp.enabled"
+animation_type = "discrete"
+spec = "https://drafts.csswg.org/css-overflow-4/#propdef-max-lines"
+affects = "layout"
+
+[block-ellipsis]
+type = "BlockEllipsis"
+initial = "computed::BlockEllipsis::NoEllipsis"
+struct = "inherited_text"
+engine = "servo"
+servo_pref = "layout.css.line-clamp.enabled"
+animation_type = "discrete"
+spec = "https://drafts.csswg.org/css-overflow-4/#propdef-block-ellipsis"
+affects = "layout"
+
+[continue]
+type = "Continue"
+initial = "computed::Continue::Normal"
+struct = "box"
+engine = "servo"
+servo_pref = "layout.css.line-clamp.enabled"
+animation_type = "discrete"
+spec = "https://drafts.csswg.org/css-overflow-4/#propdef-continue"
 affects = "layout"
 
 [-x-lang]
