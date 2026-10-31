@@ -468,6 +468,7 @@ pub enum TextAlignLast {
     Right,
     Center,
     Justify,
+    MatchParent,
 }
 
 /// Specified value of text-align keyword value.
@@ -497,6 +498,7 @@ pub enum TextAlignKeyword {
     Center,
     Justify,
     End,
+    JustifyAll,
     #[parse(aliases = "-webkit-center")]
     MozCenter,
     #[parse(aliases = "-webkit-left")]
@@ -855,6 +857,8 @@ pub enum WordBreak {
     /// `anywhere`, and `word-break` behave like `normal`.
     #[parse(condition = "word_break_break_word_enabled")]
     BreakWord,
+    Manual,
+    AutoPhrase,
 }
 
 /// Values for the `text-justify` CSS property.
@@ -1210,10 +1214,17 @@ pub enum RubyPosition {
     AlternateUnder,
     Over,
     Under,
+    InterCharacter,
 }
 
 impl Parse for RubyPosition {
     fn parse(_context: &ParserContext, input: &mut Parser) -> Result<RubyPosition, ParseError> {
+        if input
+            .try_parse(|i| i.expect_ident_matching("inter-character"))
+            .is_ok()
+        {
+            return Ok(RubyPosition::InterCharacter);
+        }
         // Parse alternate before
         let alternate = input
             .try_parse(|i| i.expect_ident_matching("alternate"))
@@ -1251,13 +1262,14 @@ impl ToCss for RubyPosition {
             RubyPosition::AlternateUnder => "alternate under",
             RubyPosition::Over => "over",
             RubyPosition::Under => "under",
+            RubyPosition::InterCharacter => "inter-character",
         })
     }
 }
 
 impl SpecifiedValueInfo for RubyPosition {
     fn collect_completion_keywords(f: KeywordsCollectFn) {
-        f(&["alternate", "over", "under"])
+        f(&["alternate", "over", "under", "inter-character"])
     }
 }
 
