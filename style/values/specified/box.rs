@@ -865,6 +865,7 @@ pub enum ScrollSnapAxis {
     Block,
     Inline,
     Both,
+    Pair,
 }
 
 /// https://drafts.csswg.org/css-scroll-snap-1/#snap-strictness
