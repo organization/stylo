@@ -1651,6 +1651,167 @@ impl Parse for PositionArea {
     }
 }
 
+impl PositionArea {
+    /// The track bits that this value selects in the horizontal and vertical axes.
+    pub fn physical_tracks(self, cb_wm: WritingMode, self_wm: WritingMode) -> [Option<u8>; 2] {
+        let area = self.to_physical(cb_wm, self_wm);
+        let track = |keyword: PositionAreaKeyword| keyword.track().map(|track| track as u8);
+        if area.first.axis() == PositionAreaAxis::Vertical
+            || area.second.axis() == PositionAreaAxis::Horizontal
+        {
+            [track(area.second), track(area.first)]
+        } else {
+            [track(area.first), track(area.second)]
+        }
+    }
+}
+
+/// A `<position-area>` in an `anchored()` container query, where `any` (`None`) matches every
+/// track of its axis.
+///
+/// https://drafts.csswg.org/css-anchor-position-2/#anchored-container-queries
+#[derive(Clone, Copy, Debug, MallocSizeOf, PartialEq, ToShmem)]
+pub struct PositionAreaPattern {
+    /// The first keyword.
+    pub first: Option<PositionAreaKeyword>,
+    /// The second keyword, if given.
+    pub second: Option<Option<PositionAreaKeyword>>,
+}
+
+impl Parse for PositionAreaPattern {
+    fn parse(_: &ParserContext, input: &mut Parser) -> Result<Self, ParseError> {
+        let keyword = |input: &mut Parser| -> Result<Option<PositionAreaKeyword>, ParseError> {
+            if input.try_parse(|i| i.expect_ident_matching("any")).is_ok() {
+                return Ok(None);
+            }
+            let keyword = PositionAreaKeyword::parse(input)?;
+            if keyword.is_none() {
+                return Err(ParseError::custom(StyleParseErrorKind::UnspecifiedError));
+            }
+            Ok(Some(keyword))
+        };
+        let first = keyword(input)?;
+        let second = input.try_parse(keyword).ok();
+        if !first.is_some() || !second.is_some_and(|second| second.is_some()) {
+            return Ok(Self { first, second });
+        }
+        let pair = PositionArea {
+            first: first.unwrap(),
+            second: second.flatten().unwrap(),
+        };
+        if pair.get_type() == PositionAreaType::None {
+            return Err(ParseError::custom(StyleParseErrorKind::UnspecifiedError));
+        }
+        Ok(Self { first, second })
+    }
+}
+
+impl ToCss for PositionAreaPattern {
+    fn to_css<W>(&self, dest: &mut CssWriter<W>) -> fmt::Result
+    where
+        W: Write,
+    {
+        let write = |keyword: Option<PositionAreaKeyword>, dest: &mut CssWriter<W>| match keyword {
+            Some(keyword) => keyword.to_css(dest),
+            None => dest.write_str("any"),
+        };
+        write(self.first, dest)?;
+        if let Some(second) = self.second {
+            dest.write_char(' ')?;
+            write(second, dest)?;
+        }
+        Ok(())
+    }
+}
+
+impl PositionAreaPattern {
+    /// The pattern that a `<position-area>` in a query stands for: a single keyword that names
+    /// its axis leaves the other axis as `any`.
+    pub fn from_query(area: PositionArea) -> Self {
+        let ambiguous = matches!(
+            area.first.axis(),
+            PositionAreaAxis::Inferred | PositionAreaAxis::None
+        );
+        let second = match (area.second.is_none(), ambiguous) {
+            (false, _) => Some(Some(area.second)),
+            (true, false) => Some(None),
+            (true, true) => None,
+        };
+        Self {
+            first: Some(area.first),
+            second,
+        }
+    }
+
+    /// Whether this pattern contains `any`.
+    pub fn has_any(&self) -> bool {
+        self.first.is_none() || self.second == Some(None)
+    }
+
+    /// Whether the position-area `applied` selects the tracks of this pattern.
+    pub fn matches(&self, applied: PositionArea, cb_wm: WritingMode, self_wm: WritingMode) -> bool {
+        let unambiguous = |keyword: Option<PositionAreaKeyword>| {
+            keyword.is_some_and(|keyword| {
+                !matches!(
+                    keyword.axis(),
+                    PositionAreaAxis::Inferred | PositionAreaAxis::None
+                )
+            })
+        };
+        let (first, second) = match self.second {
+            Some(second) => (self.first, second),
+            None if unambiguous(self.first) => (self.first, Some(PositionAreaKeyword::SpanAll)),
+            None => (self.first, self.first),
+        };
+        let physical_axis = |keyword: PositionAreaKeyword, inferred: LogicalAxis| {
+            let wm = if keyword.self_wm() { self_wm } else { cb_wm };
+            keyword
+                .axis()
+                .to_logical(wm, inferred)
+                .map(|axis| (axis == LogicalAxis::Inline) != wm.is_vertical())
+        };
+        let resolve = |keyword: Option<PositionAreaKeyword>, inferred: LogicalAxis| {
+            keyword.and_then(|keyword| {
+                let horizontal = match keyword.axis() {
+                    PositionAreaAxis::Inferred | PositionAreaAxis::None => None,
+                    _ => physical_axis(keyword, inferred),
+                }?;
+                Some(horizontal)
+            })
+        };
+        let first_axis = resolve(first, LogicalAxis::Block);
+        let second_axis = resolve(second, LogicalAxis::Inline);
+        let block_is_horizontal = cb_wm.is_vertical();
+        let first_horizontal = match (first_axis, second_axis) {
+            (Some(horizontal), _) => horizontal,
+            (None, Some(horizontal)) => !horizontal,
+            (None, None) => block_is_horizontal,
+        };
+        let track = |keyword: Option<PositionAreaKeyword>, horizontal: bool| {
+            keyword.map(|keyword| {
+                let wm = if keyword.self_wm() { self_wm } else { cb_wm };
+                let inferred = if horizontal == wm.is_vertical() {
+                    LogicalAxis::Block
+                } else {
+                    LogicalAxis::Inline
+                };
+                keyword
+                    .to_physical(cb_wm, self_wm, inferred)
+                    .track()
+                    .map(|track| track as u8)
+            })
+        };
+        let mut wanted = [None; 2];
+        wanted[usize::from(!first_horizontal)] = track(first, first_horizontal);
+        wanted[usize::from(first_horizontal)] = track(second, !first_horizontal);
+        let applied = applied.physical_tracks(cb_wm, self_wm);
+        wanted
+            .iter()
+            .zip(applied)
+            .all(|(wanted, applied)| wanted.is_none_or(|wanted| wanted == applied))
+    }
+}
+
 /// Represents a side, either horizontal or vertical, of a CSS position.
 pub trait Side {
     /// Returns the start side.

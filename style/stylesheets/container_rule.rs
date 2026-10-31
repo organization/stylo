@@ -22,9 +22,7 @@ use crate::stylesheets::{CssRules, CustomMediaEvaluator};
 use crate::stylist::Stylist;
 use crate::values::computed::{CSSPixelLength, ContainerType, Context, Ratio};
 use crate::values::specified::ContainerName;
-use crate::values::specified::position::{
-    PositionArea, PositionAreaAxis, PositionAreaKeyword, PositionTryFallbacksItem,
-};
+use crate::values::specified::position::{PositionAreaPattern, PositionTryFallbacksItem};
 use crate::{LocalName, derives::*};
 use app_units::Au;
 use cssparser::{Parser, SourceLocation};
@@ -741,6 +739,8 @@ pub enum AnchoredFallback {
     None,
     /// A position option of `position-try-fallbacks`.
     Item(PositionTryFallbacksItem),
+    /// A `<position-area>` with `any` in one or both axes.
+    Area(PositionAreaPattern),
 }
 
 impl Parse for AnchoredFallback {
@@ -748,7 +748,18 @@ impl Parse for AnchoredFallback {
         if input.try_parse(|i| i.expect_ident_matching("none")).is_ok() {
             return Ok(Self::None);
         }
-        Ok(Self::Item(PositionTryFallbacksItem::parse(context, input)?))
+        if let Ok(item) = input.try_parse(|input| {
+            let item = PositionTryFallbacksItem::parse(context, input)?;
+            input.expect_exhausted()?;
+            Ok::<_, ParseError>(item)
+        }) {
+            return Ok(Self::Item(item));
+        }
+        let pattern = PositionAreaPattern::parse(context, input)?;
+        if !pattern.has_any() {
+            return Err(ParseError::custom(StyleParseErrorKind::UnspecifiedError));
+        }
+        Ok(Self::Area(pattern))
     }
 }
 
@@ -765,20 +776,13 @@ fn eval_fallback(context: &Context, value: Option<&AnchoredFallback>) -> bool {
         (
             Some(AnchoredFallback::Item(PositionTryFallbacksItem::PositionArea(queried))),
             Some(PositionTryFallbacksItem::PositionArea(applied)),
-        ) => physical_tracks(*queried, cb_wm, info.wm) == physical_tracks(*applied, cb_wm, info.wm),
+        ) => PositionAreaPattern::from_query(*queried).matches(*applied, cb_wm, info.wm),
+        (
+            Some(AnchoredFallback::Area(pattern)),
+            Some(PositionTryFallbacksItem::PositionArea(applied)),
+        ) => pattern.matches(*applied, cb_wm, info.wm),
+        (Some(AnchoredFallback::Area(_)), _) => false,
         (Some(AnchoredFallback::Item(item)), applied) => applied.as_ref() == Some(item),
-    }
-}
-
-fn physical_tracks(area: PositionArea, cb_wm: WritingMode, wm: WritingMode) -> [Option<u8>; 2] {
-    let area = area.to_physical(cb_wm, wm);
-    let track = |keyword: PositionAreaKeyword| keyword.track().map(|track| track as u8);
-    if area.first.axis() == PositionAreaAxis::Vertical
-        || area.second.axis() == PositionAreaAxis::Horizontal
-    {
-        [track(area.second), track(area.first)]
-    } else {
-        [track(area.first), track(area.second)]
     }
 }
 
