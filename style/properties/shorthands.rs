@@ -2709,7 +2709,10 @@ pub mod outline {
             return Err(ParseError::custom(StyleParseErrorKind::UnspecifiedError));
         }
         Ok(expanded! {
-            outline_color: unwrap_or_initial!(outline_color, color),
+            outline_color: unwrap_or_initial!(
+                outline_color,
+                color.map(crate::values::generics::color::ColorOrAuto::Color)
+            ),
             outline_style: unwrap_or_initial!(outline_style, style),
             outline_width: unwrap_or_initial!(outline_width, width),
         })

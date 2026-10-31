@@ -1662,11 +1662,11 @@ servo_restyle_damage = "rebuild_box"
 affects = "layout"
 
 [outline-color]
-type = "Color"
-initial = "computed_value::T::currentcolor()"
+type = "ColorOrAuto"
+initial = "generics::color::ColorOrAuto::Auto"
 struct = "outline"
 ignored_when_colors_disabled = true
-spec = "https://drafts.csswg.org/css-ui/#propdef-outline-color"
+spec = "https://drafts.csswg.org/css-ui-4/#outline-color"
 servo_restyle_damage = "repaint"
 affects = "paint"
 
