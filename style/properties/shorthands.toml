@@ -467,7 +467,7 @@ servo_pref = "layout.css.corner-shape.enabled"
 kind = "two_properties"
 
 [outline]
-sub_properties = ["outline-color", "outline-style", "outline-width"]
+sub_properties = ["outline-width", "outline-style", "outline-color"]
 spec = "https://drafts.csswg.org/css-ui/#propdef-outline"
 
 [text-spacing]

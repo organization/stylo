@@ -2724,14 +2724,14 @@ pub mod outline {
             W: fmt::Write,
         {
             let mut writer = SequenceWriter::new(dest, " ");
-            if *self.outline_color != outline_color::get_initial_specified_value() {
-                writer.item(self.outline_color)?;
+            if *self.outline_width != outline_width::get_initial_specified_value() {
+                writer.item(self.outline_width)?;
             }
             if *self.outline_style != outline_style::get_initial_specified_value() {
                 writer.item(self.outline_style)?;
             }
-            if *self.outline_width != outline_width::get_initial_specified_value() {
-                writer.item(self.outline_width)?;
+            if *self.outline_color != outline_color::get_initial_specified_value() {
+                writer.item(self.outline_color)?;
             }
             if !writer.has_written() {
                 self.outline_style.to_css(dest)?;
