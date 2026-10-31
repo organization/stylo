@@ -1974,10 +1974,14 @@ fn substitute_one_reference<'a>(
         return Err(());
     };
 
+    // Skip the closing parenthesis of the reference value and the whitespace
+    // before it.
+    let start = fallback.start.get();
+    let end = start + css[start..reference.end - 1].trim_ascii_end().len();
     do_substitute_chunk(
         css,
-        fallback.start.get(),
-        reference.end - 1, // Skip the closing parenthesis of the reference value.
+        start,
+        end,
         fallback.first_token_type,
         fallback.last_token_type,
         url_data,
